@@ -1,24 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { 
-  HomeIcon, 
-  CogIcon, 
+import {usePathname} from 'next/navigation';
+import {
+  HomeIcon,
+  CogIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
   ChartBarSquareIcon,
   DocumentTextIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Bot Configs', href: '/bot-configs', icon: CogIcon },
-  { name: 'Đặt Lệnh', href: '/trading', icon: ChartBarIcon },
-  { name: 'Orders', href: '/orders', icon: ClipboardDocumentListIcon },
-  { name: 'Monitoring', href: '/monitoring', icon: ChartBarSquareIcon },
-  { name: 'Nhật Ký / Lỗi', href: '/logs', icon: DocumentTextIcon },
+  {name: 'Dashboard', href: '/dashboard', icon: HomeIcon},
+  {name: 'Bot Configs', href: '/bot-configs', icon: CogIcon},
+  {name: 'Đặt Lệnh', href: '/trading', icon: ChartBarIcon},
+  {name: 'Orders', href: '/orders', icon: ClipboardDocumentListIcon},
+  {name: 'Monitoring', href: '/monitoring', icon: ChartBarSquareIcon},
+  {name: 'Nhật Ký / Lỗi', href: '/logs', icon: DocumentTextIcon},
 ];
 
 export default function Sidebar() {
@@ -64,7 +64,10 @@ export default function Sidebar() {
       {/* User Section */}
       <div className="border-t border-white/10 p-6 space-y-3">
         <div className="text-center">
-          <p className="text-sm text-white/80 mb-3">Đang nhập: <span className="font-semibold text-white">bypass-user</span></p>
+          <p className="text-sm text-white/80 mb-3">
+            Đang nhập:{' '}
+            <span className="font-semibold text-white">bypass-user</span>
+          </p>
           <button
             onClick={handleLogout}
             className="w-full px-4 py-3 text-sm font-medium text-white bg-white/10 hover:bg-white/20 rounded-lg transition-all duration-200 border border-white/20">

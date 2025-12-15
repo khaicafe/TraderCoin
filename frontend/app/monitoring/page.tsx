@@ -2,7 +2,7 @@ export default function MonitoringPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Monitoring</h1>
-      
+
       {/* Real-time Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -15,7 +15,9 @@ export default function MonitoringPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">CPU Usage</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            CPU Usage
+          </h3>
           <div className="relative pt-1">
             <div className="flex mb-2 items-center justify-between">
               <div>
@@ -25,13 +27,17 @@ export default function MonitoringPage() {
               </div>
             </div>
             <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-purple-200">
-              <div style={{width: '45%'}} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-600"></div>
+              <div
+                style={{width: '45%'}}
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-600"></div>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Memory Usage</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Memory Usage
+          </h3>
           <div className="relative pt-1">
             <div className="flex mb-2 items-center justify-between">
               <div>
@@ -41,7 +47,9 @@ export default function MonitoringPage() {
               </div>
             </div>
             <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
-              <div style={{width: '62%'}} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600"></div>
+              <div
+                style={{width: '62%'}}
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600"></div>
             </div>
           </div>
         </div>
@@ -126,11 +134,21 @@ export default function MonitoringPage() {
         </div>
         <div className="p-6">
           <div className="space-y-2 font-mono text-sm">
-            <div className="text-green-600">[10:35:22] ✓ Order BTC/USDT executed at $44,129</div>
-            <div className="text-blue-600">[10:34:15] ℹ Monitoring price changes...</div>
-            <div className="text-yellow-600">[10:33:08] ⚠ High volatility detected on ETH/USDT</div>
-            <div className="text-green-600">[10:32:45] ✓ Take profit triggered for BNB/USDT</div>
-            <div className="text-blue-600">[10:31:30] ℹ Bot #3 started trading</div>
+            <div className="text-green-600">
+              [10:35:22] ✓ Order BTC/USDT executed at $44,129
+            </div>
+            <div className="text-blue-600">
+              [10:34:15] ℹ Monitoring price changes...
+            </div>
+            <div className="text-yellow-600">
+              [10:33:08] ⚠ High volatility detected on ETH/USDT
+            </div>
+            <div className="text-green-600">
+              [10:32:45] ✓ Take profit triggered for BNB/USDT
+            </div>
+            <div className="text-blue-600">
+              [10:31:30] ℹ Bot #3 started trading
+            </div>
           </div>
         </div>
       </div>
