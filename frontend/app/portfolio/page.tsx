@@ -27,10 +27,10 @@ export default function PortfolioPage() {
         </div>
       </div>
 
-      {/* Holdings */}
+      {/* Holdings Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Holdings</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Holdings</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">

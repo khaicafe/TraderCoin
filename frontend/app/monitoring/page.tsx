@@ -58,14 +58,14 @@ export default function MonitoringPage() {
       {/* Active Positions */}
       <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Vị Thế Đang Mở</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Vị Thế Đang Mở</h2>
         </div>
         <div className="p-6">
           <div className="space-y-4">
             <div className="border border-gray-200 rounded-lg p-4">
               <div className="flex justify-between items-center mb-3">
                 <div>
-                  <h3 className="font-semibold text-lg">BTC/USDT</h3>
+                  <h3 className="font-semibold text-lg text-gray-900">BTC/USDT</h3>
                   <p className="text-sm text-gray-600">Long Position</p>
                 </div>
                 <div className="text-right">
@@ -96,7 +96,7 @@ export default function MonitoringPage() {
             <div className="border border-gray-200 rounded-lg p-4">
               <div className="flex justify-between items-center mb-3">
                 <div>
-                  <h3 className="font-semibold text-lg">ETH/USDT</h3>
+                  <h3 className="font-semibold text-lg text-gray-900">ETH/USDT</h3>
                   <p className="text-sm text-gray-600">Long Position</p>
                 </div>
                 <div className="text-right">
@@ -130,7 +130,7 @@ export default function MonitoringPage() {
       {/* System Logs Preview */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Recent Activity</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
         </div>
         <div className="p-6">
           <div className="space-y-2 font-mono text-sm">

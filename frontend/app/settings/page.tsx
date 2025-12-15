@@ -6,7 +6,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-lg shadow">
         {/* Profile Settings */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold">Profile Settings</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Profile Settings</h2>
         </div>
         <div className="p-6 space-y-4">
           <div>
@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
         {/* Trading Settings */}
         <div className="px-6 py-4 border-t border-gray-200">
-          <h2 className="text-xl font-semibold">Trading Settings</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Trading Settings</h2>
         </div>
         <div className="p-6 space-y-4">
           <div>
@@ -72,7 +72,7 @@ export default function SettingsPage() {
 
         {/* Notification Settings */}
         <div className="px-6 py-4 border-t border-gray-200">
-          <h2 className="text-xl font-semibold">Notifications</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Notifications</h2>
         </div>
         <div className="p-6 space-y-3">
           <div className="flex items-center">
