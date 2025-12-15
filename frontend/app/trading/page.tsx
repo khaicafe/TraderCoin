@@ -20,7 +20,7 @@ export default function TradingPage() {
           <p className="text-sm text-yellow-800">
             <strong>Không có config nào</strong>
           </p>
-          <button 
+          <button
             onClick={() => setShowWarning(false)}
             className="ml-auto text-yellow-600 hover:text-yellow-800">
             <svg
