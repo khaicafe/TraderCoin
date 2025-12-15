@@ -15,7 +15,7 @@ export default function SettingsPage() {
             </label>
             <input
               type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
               placeholder="John Doe"
             />
           </div>
@@ -25,7 +25,7 @@ export default function SettingsPage() {
             </label>
             <input
               type="email"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
               placeholder="john@example.com"
             />
           </div>
@@ -42,7 +42,7 @@ export default function SettingsPage() {
             </label>
             <input
               type="number"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
               defaultValue="5"
             />
           </div>
@@ -52,7 +52,7 @@ export default function SettingsPage() {
             </label>
             <input
               type="number"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
               defaultValue="10"
             />
           </div>
