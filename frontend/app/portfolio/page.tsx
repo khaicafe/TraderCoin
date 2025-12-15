@@ -2,7 +2,7 @@ export default function PortfolioPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Portfolio</h1>
-      
+
       {/* Portfolio Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -36,10 +36,18 @@ export default function PortfolioPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value (USDT)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">24h Change</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Asset
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Amount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Value (USDT)
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  24h Change
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -48,18 +56,30 @@ export default function PortfolioPage() {
                   <div className="font-medium text-gray-900">BTC</div>
                   <div className="text-sm text-gray-500">Bitcoin</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.25</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$11,147.00</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">+3.2%</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  0.25
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  $11,147.00
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
+                  +3.2%
+                </td>
               </tr>
               <tr>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="font-medium text-gray-900">ETH</div>
                   <div className="text-sm text-gray-500">Ethereum</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">0.5</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$1,303.00</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">-1.5%</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  0.5
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  $1,303.00
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                  -1.5%
+                </td>
               </tr>
             </tbody>
           </table>

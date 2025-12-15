@@ -2,7 +2,7 @@ export default function SettingsPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Settings</h1>
-      
+
       <div className="bg-white rounded-lg shadow">
         {/* Profile Settings */}
         <div className="px-6 py-4 border-b border-gray-200">
@@ -62,7 +62,9 @@ export default function SettingsPage() {
               id="auto-trading"
               className="h-4 w-4 text-blue-600 border-gray-300 rounded"
             />
-            <label htmlFor="auto-trading" className="ml-2 text-sm text-gray-700">
+            <label
+              htmlFor="auto-trading"
+              className="ml-2 text-sm text-gray-700">
               Enable Auto Trading
             </label>
           </div>
@@ -80,7 +82,9 @@ export default function SettingsPage() {
               className="h-4 w-4 text-blue-600 border-gray-300 rounded"
               defaultChecked
             />
-            <label htmlFor="email-notifications" className="ml-2 text-sm text-gray-700">
+            <label
+              htmlFor="email-notifications"
+              className="ml-2 text-sm text-gray-700">
               Email Notifications
             </label>
           </div>
@@ -91,7 +95,9 @@ export default function SettingsPage() {
               className="h-4 w-4 text-blue-600 border-gray-300 rounded"
               defaultChecked
             />
-            <label htmlFor="trade-alerts" className="ml-2 text-sm text-gray-700">
+            <label
+              htmlFor="trade-alerts"
+              className="ml-2 text-sm text-gray-700">
               Trade Alerts
             </label>
           </div>

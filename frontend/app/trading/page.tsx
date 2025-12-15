@@ -2,7 +2,7 @@ export default function TradingPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Trading</h1>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Trades */}
         <div className="bg-white rounded-lg shadow p-6">
@@ -11,7 +11,9 @@ export default function TradingPage() {
             <div className="p-4 border border-gray-200 rounded-lg">
               <div className="flex justify-between items-center mb-2">
                 <span className="font-medium">BTC/USDT</span>
-                <span className="text-green-600 text-sm font-medium">+2.5%</span>
+                <span className="text-green-600 text-sm font-medium">
+                  +2.5%
+                </span>
               </div>
               <div className="text-sm text-gray-600">
                 <p>Entry: $43,500 | Current: $44,588</p>
@@ -69,8 +71,7 @@ export default function TradingPage() {
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700"
-            >
+              className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">
               Create Trade
             </button>
           </form>

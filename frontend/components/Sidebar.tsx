@@ -4,19 +4,21 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   HomeIcon, 
-  KeyIcon, 
-  ChartBarIcon, 
-  CogIcon,
-  ArrowRightOnRectangleIcon,
-  WalletIcon
+  CogIcon, 
+  ChartBarIcon,
+  ClipboardDocumentListIcon,
+  ChartBarSquareIcon,
+  DocumentTextIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Exchange Keys', href: '/exchange-keys', icon: KeyIcon },
-  { name: 'Trading', href: '/trading', icon: ChartBarIcon },
-  { name: 'Portfolio', href: '/portfolio', icon: WalletIcon },
-  { name: 'Settings', href: '/settings', icon: CogIcon },
+  { name: 'Bot Configs', href: '/bot-configs', icon: CogIcon },
+  { name: 'Đặt Lệnh', href: '/trading', icon: ChartBarIcon },
+  { name: 'Orders', href: '/orders', icon: ClipboardDocumentListIcon },
+  { name: 'Monitoring', href: '/monitoring', icon: ChartBarSquareIcon },
+  { name: 'Nhật Ký / Lỗi', href: '/logs', icon: DocumentTextIcon },
 ];
 
 export default function Sidebar() {
@@ -28,51 +30,47 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-64 bg-gray-900 text-white">
+    <div className="flex flex-col h-screen w-64 bg-gradient-to-b from-indigo-600 via-purple-600 to-purple-700 text-white shadow-2xl">
       {/* Logo */}
-      <div className="flex items-center justify-center h-16 bg-gray-800 border-b border-gray-700">
-        <h1 className="text-2xl font-bold text-blue-500">TraderCoin</h1>
+      <div className="flex items-center px-6 h-20 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+            <span className="text-2xl">🤖</span>
+          </div>
+          <h1 className="text-xl font-bold text-white">Trading Bot</h1>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
+              className={`flex items-center px-4 py-3 rounded-lg transition-all duration-200 ${
                 isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              <item.icon className="w-6 h-6 mr-3" />
-              <span className="font-medium">{item.name}</span>
+                  ? 'bg-white/20 text-white backdrop-blur-sm shadow-lg'
+                  : 'text-white/90 hover:bg-white/10 hover:text-white'
+              }`}>
+              <item.icon className="w-5 h-5 mr-3" />
+              <span className="text-sm font-medium">{item.name}</span>
             </Link>
           );
         })}
       </nav>
 
       {/* User Section */}
-      <div className="border-t border-gray-700 p-4">
-        <div className="flex items-center mb-4">
-          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
-            <span className="text-sm font-semibold">U</span>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm font-medium">User Account</p>
-            <p className="text-xs text-gray-400">Free Plan</p>
-          </div>
+      <div className="border-t border-white/10 p-6 space-y-3">
+        <div className="text-center">
+          <p className="text-sm text-white/80 mb-3">Đang nhập: <span className="font-semibold text-white">bypass-user</span></p>
+          <button
+            onClick={handleLogout}
+            className="w-full px-4 py-3 text-sm font-medium text-white bg-white/10 hover:bg-white/20 rounded-lg transition-all duration-200 border border-white/20">
+            Đăng xuất
+          </button>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
-        >
-          <ArrowRightOnRectangleIcon className="w-5 h-5 mr-3" />
-          Logout
-        </button>
       </div>
     </div>
   );
