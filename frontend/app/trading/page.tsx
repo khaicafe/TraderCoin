@@ -43,7 +43,9 @@ export default function TradingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column - Bot Config Selection */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Chọn Bot Config</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">
+            Chọn Bot Config
+          </h2>
 
           <div>
             <select
@@ -59,7 +61,9 @@ export default function TradingPage() {
 
         {/* Right Column - Order Form */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900">Thông Tin Lệnh</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">
+            Thông Tin Lệnh
+          </h2>
 
           <form className="space-y-4">
             {/* Symbol */}
