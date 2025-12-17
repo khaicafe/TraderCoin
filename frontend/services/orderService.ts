@@ -11,6 +11,8 @@ export interface Order {
   quantity: number;
   price: number;
   filled_price?: number;
+  filled_quantity?: number;
+  current_price?: number; // Current market price from exchange
   status: string; // 'pending', 'filled', 'closed', 'cancelled'
   trading_mode?: string; // 'spot', 'futures', 'margin'
   leverage?: number;

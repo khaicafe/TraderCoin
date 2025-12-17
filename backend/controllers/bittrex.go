@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"tradercoin/backend/config"
 	"tradercoin/backend/services"
 
 	"github.com/gin-gonic/gin"
@@ -12,8 +13,11 @@ import (
 // GetBittrexSymbols - Lấy danh sách symbols từ Bittrex API
 func GetBittrexSymbols(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := config.Load()
+		apiURL := cfg.Exchanges.Bittrex.APIURL + "/markets"
+
 		// Call Bittrex API to get markets
-		resp, err := http.Get("https://api.bittrex.com/v3/markets")
+		resp, err := http.Get(apiURL)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Bittrex data"})
 			return

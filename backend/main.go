@@ -58,10 +58,15 @@ func main() {
 	}
 
 	// Initialize services
-	services := &services.Services{
+	svcs := &services.Services{
 		DB:    db,
 		Redis: redisClient,
 	}
+
+	// Initialize WebSocket Hub
+	wsHub := services.NewWebSocketHub(db, cfg)
+	go wsHub.Run() // Run hub in background
+	log.Println("WebSocket Hub initialized")
 
 	// Setup Gin router
 	router := gin.Default()
@@ -71,7 +76,7 @@ func main() {
 	router.Use(middleware.RateLimiter())
 
 	// API routes
-	api.SetupRoutes(router, services)
+	api.SetupRoutes(router, svcs, wsHub)
 
 	// Start server
 	port := os.Getenv("PORT")

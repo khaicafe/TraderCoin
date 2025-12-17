@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"tradercoin/backend/config"
 	"tradercoin/backend/models"
 	"tradercoin/backend/services"
 	"tradercoin/backend/utils"
@@ -114,7 +115,8 @@ func GetAccountInfo(services *services.Services) gin.HandlerFunc {
 
 // getBinanceAccountInfo fetches account information from Binance
 func getBinanceAccountInfo(apiKey, apiSecret string) (AccountInfoResponse, error) {
-	baseURL := "https://api.binance.com"
+	cfg := config.Load()
+	baseURL := cfg.Exchanges.Binance.SpotAPIURL // Use production spot API
 	endpoint := "/api/v3/account"
 
 	// Create timestamp and signature
@@ -195,7 +197,8 @@ func getBinanceAccountInfo(apiKey, apiSecret string) (AccountInfoResponse, error
 
 // getBittrexAccountInfo fetches account information from Bittrex
 func getBittrexAccountInfo(apiKey, apiSecret string) (AccountInfoResponse, error) {
-	baseURL := "https://api.bittrex.com/v3"
+	cfg := config.Load()
+	baseURL := cfg.Exchanges.Bittrex.APIURL
 	endpoint := "/balances"
 
 	// Create request

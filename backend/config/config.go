@@ -35,9 +35,60 @@ type Config struct {
 	// Encryption (for API keys and secrets)
 	EncryptionKey string
 
-	// Exchange APIs
-	BinanceAPIURL string
-	BittrexAPIURL string
+	// Exchange Configurations
+	Exchanges ExchangeConfig
+}
+
+// ExchangeConfig holds all exchange API and WebSocket configurations
+type ExchangeConfig struct {
+	Binance BinanceConfig
+	OKX     OKXConfig
+	Bybit   BybitConfig
+	Kraken  KrakenConfig
+	Bittrex BittrexConfig
+}
+
+// BinanceConfig for Binance exchange
+type BinanceConfig struct {
+	// Production URLs
+	SpotAPIURL    string
+	FuturesAPIURL string
+	SpotWSURL     string
+	FuturesWSURL  string
+
+	// Testnet URLs
+	TestnetSpotAPIURL    string
+	TestnetFuturesAPIURL string
+	TestnetSpotWSURL     string
+	TestnetFuturesWSURL  string
+
+	// Ticker API endpoints (for real-time price)
+	SpotTickerAPI    string // e.g., /api/v3/ticker/price
+	FuturesTickerAPI string // e.g., /fapi/v1/ticker/price
+}
+
+// OKXConfig for OKX exchange
+type OKXConfig struct {
+	APIURL string
+	WSURL  string
+}
+
+// BybitConfig for Bybit exchange
+type BybitConfig struct {
+	APIURL string
+	WSURL  string
+}
+
+// KrakenConfig for Kraken exchange
+type KrakenConfig struct {
+	APIURL    string
+	WSURL     string
+	WSAuthURL string
+}
+
+// BittrexConfig for Bittrex exchange
+type BittrexConfig struct {
+	APIURL string
 }
 
 func Load() *Config {
@@ -75,8 +126,46 @@ func Load() *Config {
 		// Encryption key must be 32 bytes for AES-256
 		EncryptionKey: getEnv("ENCRYPTION_KEY", "your-32-byte-encryption-key-1234"),
 
-		BinanceAPIURL: getEnv("BINANCE_API_URL", "https://api.binance.com"),
-		BittrexAPIURL: getEnv("BITTREX_API_URL", "https://api.bittrex.com"),
+		// Exchange Configurations
+		Exchanges: ExchangeConfig{
+			Binance: BinanceConfig{
+				// Production
+				// SpotAPIURL:    "https://api.binance.com",
+				// FuturesAPIURL: "https://fapi.binance.com",
+				// SpotWSURL:     "wss://stream.binance.com:9443/ws",
+				// FuturesWSURL:  "wss://fstream.binance.com/ws",
+
+				// Testnet - Using correct URLs from Binance docs
+				// Base APIs for REST
+				SpotAPIURL:           "https://testnet.binance.vision",
+				FuturesAPIURL:        "https://testnet.binancefuture.com",
+				// Market data WS (combined streams). For user data WS use TestnetSpotWSURL/TestnetFuturesWSURL
+				SpotWSURL:            "wss://stream.testnet.binance.vision/ws",
+				FuturesWSURL:         "wss://stream.binancefuture.com/ws",
+				// Explicit testnet fields (used by adapters when isTestnet=true)
+				TestnetSpotAPIURL:    "https://testnet.binance.vision",
+				TestnetFuturesAPIURL: "https://testnet.binancefuture.com",
+				// User data WS endpoints (listenKey based)
+				TestnetSpotWSURL:     "wss://testnet.binance.vision/ws",
+				TestnetFuturesWSURL:  "wss://stream.binancefuture.com/ws",
+			},
+			OKX: OKXConfig{
+				APIURL: "https://www.okx.com",
+				WSURL:  "wss://ws.okx.com:8443/ws/v5/private",
+			},
+			Bybit: BybitConfig{
+				APIURL: "https://api.bybit.com",
+				WSURL:  "wss://stream.bybit.com/v5/private",
+			},
+			Kraken: KrakenConfig{
+				APIURL:    "https://api.kraken.com",
+				WSURL:     "wss://ws.kraken.com",
+				WSAuthURL: "wss://ws-auth.kraken.com",
+			},
+			Bittrex: BittrexConfig{
+				APIURL: "https://api.bittrex.com/v3",
+			},
+		},
 	}
 }
 

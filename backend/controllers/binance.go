@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"tradercoin/backend/config"
 	"tradercoin/backend/services"
 
 	"github.com/gin-gonic/gin"
@@ -12,8 +13,11 @@ import (
 // GetBinanceFuturesSymbols - Lấy danh sách symbols từ Binance Futures API
 func GetBinanceFuturesSymbols(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := config.Load()
+		apiURL := cfg.Exchanges.Binance.FuturesAPIURL + "/fapi/v1/exchangeInfo"
+
 		// Call Binance Futures API to get exchange info
-		resp, err := http.Get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+		resp, err := http.Get(apiURL)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Binance data"})
 			return
@@ -79,8 +83,11 @@ func GetBinanceFuturesSymbols(services *services.Services) gin.HandlerFunc {
 // GetBinanceSpotSymbols - Lấy danh sách symbols từ Binance Spot API
 func GetBinanceSpotSymbols(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := config.Load()
+		apiURL := cfg.Exchanges.Binance.SpotAPIURL + "/api/v3/exchangeInfo"
+
 		// Call Binance Spot API to get exchange info
-		resp, err := http.Get("https://api.binance.com/api/v3/exchangeInfo")
+		resp, err := http.Get(apiURL)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Binance data"})
 			return

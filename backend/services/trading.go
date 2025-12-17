@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"tradercoin/backend/config"
 	"tradercoin/backend/models"
 )
 
@@ -63,9 +64,25 @@ func (ts *TradingService) PlaceOrder(config *models.TradingConfig, side, orderTy
 
 // placeBinanceOrder places an order on Binance
 func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, orderType, symbol string, amount, price float64) OrderResult {
-	// baseURL := "https://api.binance.com"
-	endpoint := "/api/v3/order"
-	baseURL := "https://testnet.binance.vision"
+	// For now, default to production (not testnet)
+	// TODO: Add testnet flag to TradingConfig or ExchangeKey model
+	isTestnet := false
+	tradingMode := config.TradingMode
+	if tradingMode == "" {
+		tradingMode = "spot" // Default to spot
+	}
+
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+
+	var baseURL string
+	var endpoint string
+	if tradingMode == "futures" {
+		baseURL = adapter.FuturesAPIURL
+		endpoint = "/fapi/v1/order"
+	} else {
+		baseURL = adapter.SpotAPIURL
+		endpoint = "/api/v3/order"
+	}
 
 	// Convert to Binance format
 	binanceSide := strings.ToUpper(side)      // buy -> BUY, sell -> SELL
@@ -206,8 +223,9 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 }
 
 // placeBittrexOrder places an order on Bittrex
-func (ts *TradingService) placeBittrexOrder(config *models.TradingConfig, side, orderType, symbol string, amount, price float64) OrderResult {
-	baseURL := "https://api.bittrex.com/v3"
+func (ts *TradingService) placeBittrexOrder(tradingConfig *models.TradingConfig, side, orderType, symbol string, amount, price float64) OrderResult {
+	cfg := config.Load()
+	baseURL := cfg.Exchanges.Bittrex.APIURL
 	endpoint := "/orders"
 
 	// Prepare request body

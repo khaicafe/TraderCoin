@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.Engine, services *services.Services) {
+func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *services.WebSocketHub) {
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
@@ -110,6 +110,11 @@ func SetupRoutes(router *gin.Engine, services *services.Services) {
 
 			// Testnet utilities
 			trading.POST("/refill-testnet/:config_id", controllers.RefillTestnetBalance(services)) // Refill testnet balance
+
+			// WebSocket endpoints
+			trading.GET("/ws", controllers.ConnectWebSocket(services, wsHub))                     // WebSocket upgrade
+			trading.POST("/listen-key/:exchange_key_id", controllers.CreateListenKey(services))   // Create listen key
+			trading.PUT("/listen-key/:exchange_key_id", controllers.KeepAliveListenKey(services)) // Keep alive listen key
 
 			// Legacy config routes (kept for backward compatibility)
 			trading.GET("/configs", controllers.GetTradingConfigs(services))

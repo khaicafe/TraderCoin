@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"tradercoin/backend/config"
 	"tradercoin/backend/models"
 	"tradercoin/backend/services"
 	tradingservice "tradercoin/backend/services"
@@ -18,6 +19,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// Type aliases for WebSocket requests
+type RegisterRequest = services.RegisterRequest
+type UnregisterRequest = services.UnregisterRequest
 
 // PlaceOrderRequest represents the request body for placing an order
 type PlaceOrderRequest struct {
@@ -500,15 +505,19 @@ func RefreshPnL(services *services.Services) gin.HandlerFunc {
 
 // fetchBinanceSymbols fetches all trading symbols from Binance
 func fetchBinanceSymbols(apiKey, apiSecret, tradingMode string) ([]string, error) {
+	cfg := config.Load()
+	binanceCfg := cfg.Exchanges.Binance
+
 	var baseURL string
 	var endpoint string
 
 	// Determine API endpoint based on trading mode
+	// Default to production (not testnet)
 	if tradingMode == "futures" {
-		baseURL = "https://fapi.binance.com"
+		baseURL = binanceCfg.FuturesAPIURL
 		endpoint = "/fapi/v1/exchangeInfo"
 	} else {
-		baseURL = "https://api.binance.com"
+		baseURL = binanceCfg.SpotAPIURL
 		endpoint = "/api/v3/exchangeInfo"
 	}
 
@@ -562,7 +571,8 @@ func fetchBinanceSymbols(apiKey, apiSecret, tradingMode string) ([]string, error
 
 // fetchBittrexSymbols fetches all trading symbols from Bittrex
 func fetchBittrexSymbols(apiKey, apiSecret string) ([]string, error) {
-	baseURL := "https://api.bittrex.com/v3"
+	cfg := config.Load()
+	baseURL := cfg.Exchanges.Bittrex.APIURL
 	endpoint := "/markets"
 	fullURL := baseURL + endpoint
 
@@ -739,4 +749,254 @@ func tradingHmacSha512(message, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(message))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ConnectWebSocket - WebSocket upgrade endpoint for real-time order updates
+func ConnectWebSocket(services *services.Services, hub *services.WebSocketHub) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		// Upgrade HTTP connection to WebSocket
+		upgrader := services.GetWebSocketUpgrader()
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("Failed to upgrade WebSocket: %v", err)
+			return
+		}
+
+		sessionID := c.Query("session_id")
+		if sessionID == "" {
+			sessionID = fmt.Sprintf("%d_%d", userID, time.Now().UnixNano())
+		}
+
+		log.Printf("User %d connected via WebSocket (session: %s)", userID, sessionID)
+
+		// Get all active exchange keys for this user
+		var exchangeKeys []models.ExchangeKey
+		if err := services.DB.Where("user_id = ? AND is_active = ?", userID, true).
+			Find(&exchangeKeys).Error; err != nil {
+			log.Printf("Failed to fetch exchange keys: %v", err)
+			conn.Close()
+			return
+		}
+
+		// Register each exchange key with the hub
+		for _, key := range exchangeKeys {
+			// Create or get listen key
+			listenKey := key.ListenKey
+
+			// Check if listen key is expired or empty
+			if listenKey == "" || key.ListenKeyExp == nil || key.ListenKeyExp.Before(time.Now()) {
+				// Create new listen key
+				adapter := services.GetExchangeAdapter(key.Exchange, true) // TODO: use config for testnet
+				if adapter == nil {
+					log.Printf("Unsupported exchange: %s", key.Exchange)
+					continue
+				}
+
+				apiKey, apiSecret, err := DecryptExchangeKey(&key)
+				if err != nil {
+					log.Printf("Failed to decrypt API key: %v", err)
+					continue
+				}
+
+				newListenKey, err := adapter.CreateListenKey(apiKey, apiSecret)
+				if err != nil {
+					log.Printf("Failed to create listen key for %s: %v", key.Exchange, err)
+					continue
+				}
+
+				// Update listen key in database
+				expTime := time.Now().Add(60 * time.Minute)
+				key.ListenKey = newListenKey
+				key.ListenKeyExp = &expTime
+
+				if err := services.DB.Save(&key).Error; err != nil {
+					log.Printf("Failed to save listen key: %v", err)
+					continue
+				}
+
+				listenKey = newListenKey
+			}
+
+			// Register with hub
+			regReq := &RegisterRequest{
+				UserID:        userID.(uint),
+				ExchangeKeyID: key.ID,
+				Exchange:      key.Exchange,
+				TradingMode:   key.TradingMode,
+				ListenKey:     listenKey,
+				SessionID:     sessionID,
+				UserConn:      conn,
+			}
+			hub.Register <- regReq
+		}
+
+		// Handle client disconnection
+		go func() {
+			defer func() {
+				for _, key := range exchangeKeys {
+					unregReq := &UnregisterRequest{
+						UserID:        userID.(uint),
+						ExchangeKeyID: key.ID,
+						SessionID:     sessionID,
+					}
+					hub.Unregister <- unregReq
+				}
+				conn.Close()
+			}()
+
+			for {
+				_, _, err := conn.ReadMessage()
+				if err != nil {
+					log.Printf("WebSocket disconnected for user %d: %v", userID, err)
+					break
+				}
+			}
+		}()
+	}
+}
+
+// CreateListenKey - Create listen key for exchange WebSocket
+func CreateListenKey(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		exchangeKeyID := c.Param("exchange_key_id")
+		keyID, err := strconv.Atoi(exchangeKeyID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid exchange key ID"})
+			return
+		}
+
+		// Get exchange key
+		var exchangeKey models.ExchangeKey
+		if err := services.DB.Where("id = ? AND user_id = ?", keyID, userID).
+			First(&exchangeKey).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Exchange key not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch exchange key"})
+			return
+		}
+
+		// Get adapter
+		adapter := services.GetExchangeAdapter(exchangeKey.Exchange, true) // TODO: use config
+		if adapter == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported exchange"})
+			return
+		}
+
+		// Decrypt credentials
+		apiKey, apiSecret, err := DecryptExchangeKey(&exchangeKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt credentials"})
+			return
+		}
+
+		// Create listen key
+		listenKey, err := adapter.CreateListenKey(apiKey, apiSecret)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to create listen key",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// Save to database
+		expTime := time.Now().Add(60 * time.Minute)
+		exchangeKey.ListenKey = listenKey
+		exchangeKey.ListenKeyExp = &expTime
+
+		if err := services.DB.Save(&exchangeKey).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save listen key"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":     "success",
+			"listen_key": listenKey,
+			"expires_at": expTime,
+		})
+	}
+}
+
+// KeepAliveListenKey - Keep listen key alive
+func KeepAliveListenKey(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		exchangeKeyID := c.Param("exchange_key_id")
+		keyID, err := strconv.Atoi(exchangeKeyID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid exchange key ID"})
+			return
+		}
+
+		// Get exchange key
+		var exchangeKey models.ExchangeKey
+		if err := services.DB.Where("id = ? AND user_id = ?", keyID, userID).
+			First(&exchangeKey).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Exchange key not found"})
+			return
+		}
+
+		if exchangeKey.ListenKey == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "No listen key found"})
+			return
+		}
+
+		// Get adapter
+		adapter := services.GetExchangeAdapter(exchangeKey.Exchange, true)
+		if adapter == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported exchange"})
+			return
+		}
+
+		// Decrypt credentials
+		apiKey, apiSecret, err := DecryptExchangeKey(&exchangeKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt credentials"})
+			return
+		}
+
+		// Keep alive
+		if err := adapter.KeepAliveListenKey(apiKey, apiSecret, exchangeKey.ListenKey); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to keep alive listen key",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		// Update expiration
+		expTime := time.Now().Add(60 * time.Minute)
+		exchangeKey.ListenKeyExp = &expTime
+		services.DB.Save(&exchangeKey)
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":     "success",
+			"expires_at": expTime,
+		})
+	}
+}
+
+// DecryptExchangeKey decrypts exchange API credentials
+func DecryptExchangeKey(key *models.ExchangeKey) (string, string, error) {
+	// TODO: Implement actual decryption
+	return key.APIKey, key.APISecret, nil
 }

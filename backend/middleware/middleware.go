@@ -37,20 +37,32 @@ func RateLimiter() gin.HandlerFunc {
 // AuthMiddleware - JWT authentication middleware
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get token from Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
-			c.Abort()
-			return
-		}
+		var tokenString string
 
-		// Extract token from "Bearer <token>"
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
-			c.Abort()
-			return
+		// For WebSocket upgrade requests, always check query parameter first
+		if c.GetHeader("Upgrade") == "websocket" || c.Query("token") != "" {
+			tokenString = c.Query("token")
+			if tokenString == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization token required in query parameter"})
+				c.Abort()
+				return
+			}
+		} else {
+			// For regular HTTP requests, check Authorization header
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+				c.Abort()
+				return
+			}
+
+			// Extract token from "Bearer <token>"
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			if tokenString == authHeader {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
+				c.Abort()
+				return
+			}
 		}
 
 		// Parse and validate token

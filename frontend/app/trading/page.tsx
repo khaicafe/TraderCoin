@@ -30,6 +30,8 @@ export default function TradingPage() {
   const [symbol, setSymbol] = useState('');
   const [amount, setAmount] = useState('');
   const [price, setPrice] = useState('');
+  const [symbolSearch, setSymbolSearch] = useState('');
+  const [showSymbolDropdown, setShowSymbolDropdown] = useState(false);
 
   useEffect(() => {
     fetchBotConfigs();
@@ -70,6 +72,7 @@ export default function TradingPage() {
   const handleSelectConfig = async (config: BotConfig) => {
     setSelectedConfig(config);
     setSymbol(config.symbol || '');
+    setSymbolSearch(config.symbol || '');
     setAmount(config.amount?.toString() || '');
     setError('');
     setSuccess('');
@@ -100,6 +103,17 @@ export default function TradingPage() {
     } finally {
       setLoadingAccount(false);
     }
+  };
+
+  // Filter symbols based on search
+  const filteredSymbols = symbols.filter((sym) =>
+    sym.toLowerCase().includes(symbolSearch.toLowerCase()),
+  );
+
+  const handleSymbolSelect = (sym: string) => {
+    setSymbol(sym);
+    setSymbolSearch(sym);
+    setShowSymbolDropdown(false);
   };
 
   const handlePlaceOrder = async (side: 'buy' | 'sell') => {
@@ -347,7 +361,6 @@ export default function TradingPage() {
                             {accountInfo.balances
                               .filter((b) => b.total > 0.00001)
                               .sort((a, b) => b.total - a.total)
-                              .slice(0, 10)
                               .map((balance, idx) => (
                                 <div
                                   key={idx}
@@ -399,18 +412,42 @@ export default function TradingPage() {
                   <span>Đang tải symbols...</span>
                 </div>
               ) : symbols.length > 0 ? (
-                <select
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
-                  disabled={!selectedConfig}>
-                  <option value="">-- Chọn Symbol --</option>
-                  {symbols.map((sym) => (
-                    <option key={sym} value={sym}>
-                      {sym}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={symbolSearch}
+                    onChange={(e) => {
+                      setSymbolSearch(e.target.value);
+                      setShowSymbolDropdown(true);
+                    }}
+                    onFocus={() => setShowSymbolDropdown(true)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                    placeholder="Gõ để tìm symbol..."
+                    disabled={!selectedConfig}
+                  />
+                  {showSymbolDropdown && filteredSymbols.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredSymbols.map((sym) => (
+                        <div
+                          key={sym}
+                          onClick={() => handleSymbolSelect(sym)}
+                          className={`px-4 py-2 cursor-pointer hover:bg-indigo-50 ${
+                            symbol === sym ? 'bg-indigo-100 font-semibold' : ''
+                          }`}>
+                          {sym}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {showSymbolDropdown && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSymbolDropdown(false)}
+                      className="fixed inset-0 w-full h-full cursor-default z-0"
+                      tabIndex={-1}
+                    />
+                  )}
+                </div>
               ) : (
                 <input
                   type="text"
