@@ -135,19 +135,11 @@ func Load() *Config {
 				// SpotWSURL:     "wss://stream.binance.com:9443/ws",
 				// FuturesWSURL:  "wss://fstream.binance.com/ws",
 
-				// Testnet - Using correct URLs from Binance docs
-				// Base APIs for REST
-				SpotAPIURL:           "https://testnet.binance.vision",
-				FuturesAPIURL:        "https://testnet.binancefuture.com",
-				// Market data WS (combined streams). For user data WS use TestnetSpotWSURL/TestnetFuturesWSURL
-				SpotWSURL:            "wss://stream.testnet.binance.vision/ws",
-				FuturesWSURL:         "wss://stream.binancefuture.com/ws",
-				// Explicit testnet fields (used by adapters when isTestnet=true)
-				TestnetSpotAPIURL:    "https://testnet.binance.vision",
-				TestnetFuturesAPIURL: "https://testnet.binancefuture.com",
-				// User data WS endpoints (listenKey based)
-				TestnetSpotWSURL:     "wss://testnet.binance.vision/ws",
-				TestnetFuturesWSURL:  "wss://stream.binancefuture.com/ws",
+				// Testnet - Using correct stream URLs from Binance docs
+				SpotAPIURL:    "https://testnet.binance.vision",
+				FuturesAPIURL: "https://testnet.binancefuture.com",
+				SpotWSURL:     "wss://stream.testnet.binance.vision/ws", // For market data streams
+				FuturesWSURL:  "wss://stream.binancefuture.com/ws",
 			},
 			OKX: OKXConfig{
 				APIURL: "https://www.okx.com",
