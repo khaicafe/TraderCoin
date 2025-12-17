@@ -2,37 +2,77 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"log"
 	"tradercoin/backend/config"
+	"tradercoin/backend/models"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func Connect() (*sql.DB, error) {
+func Connect() (*gorm.DB, error) {
 	cfg := config.Load()
 
-	// SQLite database file
-	dbPath := cfg.DBPath
-	if dbPath == "" {
-		dbPath = "./tradercoin.db"
+	var db *gorm.DB
+	var err error
+
+	// GORM config
+	gormConfig := &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	switch cfg.DBType {
+	case "postgresql":
+		// PostgreSQL connection
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			cfg.PostgresHost,
+			cfg.PostgresPort,
+			cfg.PostgresUser,
+			cfg.PostgresPassword,
+			cfg.PostgresDB,
+			cfg.PostgresSSLMode,
+		)
+		db, err = gorm.Open(postgres.Open(dsn), gormConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open PostgreSQL connection: %w", err)
+		}
+		log.Println("🐘 Using PostgreSQL database")
+
+	case "sqlite":
+		// SQLite connection
+		dbPath := cfg.DBPath
+		if dbPath == "" {
+			dbPath = "./tradercoin.db"
+		}
+		db, err = gorm.Open(sqlite.Open(dbPath), gormConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open SQLite connection: %w", err)
+		}
+		log.Println("📦 Using SQLite database")
+
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s (supported: sqlite, postgresql)", cfg.DBType)
+	}
+
+	// Test connection
+	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, err
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, err
-	}
+	// Set connection pool settings
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
 
+	log.Println("✅ Database connected successfully")
 	return db, nil
 }
 
@@ -57,84 +97,21 @@ func InitRedis() *redis.Client {
 	return client
 }
 
-func RunMigrations(db *sql.DB) error {
-	migrations := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			email VARCHAR(255) UNIQUE NOT NULL,
-			password_hash VARCHAR(255) NOT NULL,
-			full_name VARCHAR(255),
-			phone VARCHAR(50),
-			status VARCHAR(50) DEFAULT 'active',
-			subscription_end TIMESTAMP,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
+func RunMigrations(db *gorm.DB) error {
+	// Auto migrate all models
+	err := db.AutoMigrate(
+		&models.User{},
+		&models.ExchangeKey{},
+		&models.TradingConfig{},
+		&models.Order{},
+		&models.Transaction{},
+		&models.Admin{},
+	)
 
-		`CREATE TABLE IF NOT EXISTS exchange_keys (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-			exchange VARCHAR(50) NOT NULL,
-			api_key VARCHAR(255) NOT NULL,
-			api_secret VARCHAR(255) NOT NULL,
-			is_active BOOLEAN DEFAULT true,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(user_id, exchange)
-		)`,
-
-		`CREATE TABLE IF NOT EXISTS trading_configs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-			exchange VARCHAR(50) NOT NULL,
-			symbol VARCHAR(50) NOT NULL,
-			stop_loss_percent DECIMAL(10, 2),
-			take_profit_percent DECIMAL(10, 2),
-			is_active BOOLEAN DEFAULT true,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-
-		`CREATE TABLE IF NOT EXISTS orders (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-			exchange VARCHAR(50) NOT NULL,
-			symbol VARCHAR(50) NOT NULL,
-			order_id VARCHAR(255),
-			side VARCHAR(10) NOT NULL,
-			type VARCHAR(20) NOT NULL,
-			quantity DECIMAL(20, 8),
-			price DECIMAL(20, 8),
-			status VARCHAR(50) DEFAULT 'pending',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-
-		`CREATE TABLE IF NOT EXISTS transactions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-			amount DECIMAL(10, 2) NOT NULL,
-			type VARCHAR(50) NOT NULL,
-			status VARCHAR(50) DEFAULT 'pending',
-			description TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
-
-		`CREATE TABLE IF NOT EXISTS admins (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			email VARCHAR(255) UNIQUE NOT NULL,
-			password_hash VARCHAR(255) NOT NULL,
-			full_name VARCHAR(255),
-			role VARCHAR(50) DEFAULT 'admin',
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
+	if err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	for _, migration := range migrations {
-		if _, err := db.Exec(migration); err != nil {
-			return err
-		}
-	}
-
+	log.Println("✅ Database migrations completed")
 	return nil
 }

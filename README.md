@@ -290,6 +290,20 @@ MIT License
 ---
 
 **Note**: This is a trading platform. Always test thoroughly before using with real funds. Use at your own risk.
+
+# Start PostgreSQL
+
+docker run -d -p 5432:5432 \
+ -e POSTGRES_USER=tradercoin \
+ -e POSTGRES_PASSWORD=tradercoin123 \
+ -e POSTGRES_DB=tradercoin_db \
+ postgres:15-alpine
+
+# Run backend
+
+cd Backend
+DB_TYPE=postgresql go run main.go
+
 📦 Files Mới
 seed.go - Script tự động tạo admin và user mẫu
 .env - File cấu hình Backend
@@ -336,6 +350,6 @@ Frontend (/) giờ sẽ tự động:
 ✅ Đã login → Redirect về /dashboard
 
 apikey
-jCpVbYQocIBF13PY6vEasE9qRZixaeREcToyDOmp39ig4UvWFvG7HpcT8DASxs8M
+CfJsnKKOqXKzQBXca8Wii6rBW9sCSmSaK9Skn0JGG6ooAdaUSSMgMGbudTa6dnwz
 Secret Key
-xymLfupAHQk9Gzz3khQMaBWlath5HSkpHmhsfxQWSiMtERAsgVca57gkrFA6nCF5
+bqQBmHfL0qKjUd8Vj7Y1GpLfA6RVMNq8eoLtHO0Fu6PLwNv4n2X19uzWaJsBbJH9

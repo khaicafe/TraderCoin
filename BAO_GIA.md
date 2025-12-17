@@ -3,7 +3,7 @@
 ## Thông Tin Dự Án
 **Tên dự án:** TraderCoin - Nền Tảng Giao Dịch Cryptocurrency Tự Động  
 **Ngày báo giá:** 16/12/2025  
-**Thời gian thực hiện:** 8-12 tuần  
+**Thời gian thực hiện:** 6-8 tuần  
 **Bảo hành:** 3 tháng miễn phí
 
 ---
@@ -11,203 +11,63 @@
 ## Tổng Quan Hệ Thống
 
 TraderCoin là một nền tảng giao dịch cryptocurrency tự động hoàn chỉnh bao gồm:
-- **Frontend:** Ứng dụng người dùng (Next.js + TypeScript + Tailwind CSS)
+- **Frontend:** Ứng dụng người dùng (Next.js + TypeScript)
 - **Backend:** API và Trading Engine (Golang + PostgreSQL + Redis)
-- **Backoffice:** Hệ thống quản trị (Next.js + TypeScript + Tailwind CSS)
+- **Backoffice:** Hệ thống quản trị (Next.js)
 
 ---
 
 ## CHI TIẾT TÍNH NĂNG VÀ GIÁ
 
-### 1. FRONTEND - ỨNG DỤNG NGƯỜI DÙNG
+### 1. FRONTEND - ỨNG DỤNG NGƯỜI DÙNG (9 trang)
 
-#### 1.1 Authentication & User Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Đăng ký tài khoản | Form đăng ký với validation | 2,000,000 |
-| Đăng nhập | JWT authentication | 1,500,000 |
-| Quên mật khẩu | Reset password qua email | 1,500,000 |
-| Quản lý profile | Cập nhật thông tin cá nhân | 1,000,000 |
-| **Tổng phụ** | | **6,000,000** |
-
-#### 1.2 Dashboard
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Tổng quan thống kê | 4 cards thống kê chính | 2,500,000 |
-| Biểu đồ doanh thu | Charts với real-time data | 3,000,000 |
-| Lịch sử giao dịch | Timeline activities | 2,000,000 |
-| **Tổng phụ** | | **7,500,000** |
-
-#### 1.3 Exchange Keys Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Kết nối Binance API | Integration với Binance | 3,000,000 |
-| Kết nối Bittrex API | Integration với Bittrex | 3,000,000 |
-| Quản lý API keys | CRUD operations | 2,000,000 |
-| Test connection | Kiểm tra kết nối API | 1,500,000 |
-| **Tổng phụ** | | **9,500,000** |
-
-#### 1.4 Bot Configuration
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Tạo bot config | Form với 9 fields validation | 3,000,000 |
-| Danh sách bot configs | Table với filter & search | 2,500,000 |
-| Chỉnh sửa/Xóa config | CRUD operations | 2,000,000 |
-| Import/Export configs | JSON format | 1,500,000 |
-| **Tổng phụ** | | **9,000,000** |
-
-#### 1.5 Trading (Đặt Lệnh)
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Đặt lệnh Market | Giao dịch giá thị trường | 3,000,000 |
-| Đặt lệnh Limit | Giao dịch giá cố định | 3,000,000 |
-| Stop Loss / Take Profit | Tự động cắt lỗ/chốt lời | 4,000,000 |
-| Symbol search | Tìm kiếm 40+ symbols | 2,000,000 |
-| Warning alerts | Cảnh báo rủi ro | 1,500,000 |
-| **Tổng phụ** | | **13,500,000** |
-
-#### 1.6 Orders Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Danh sách lệnh | Table với pagination | 2,500,000 |
-| Lọc & tìm kiếm | Filter by status, time | 2,000,000 |
-| Hủy lệnh | Cancel pending orders | 1,500,000 |
-| Chi tiết lệnh | Order details modal | 1,500,000 |
-| **Tổng phụ** | | **7,500,000** |
-
-#### 1.7 Monitoring
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Real-time bot status | WebSocket updates | 4,000,000 |
-| Vị thế đang mở | Active positions tracking | 3,000,000 |
-| Performance charts | Biểu đồ hiệu suất | 3,000,000 |
-| Recent activity logs | Timeline activities | 2,000,000 |
-| **Tổng phụ** | | **12,000,000** |
-
-#### 1.8 Logs & Error Tracking
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| System logs | Log viewer với colors | 2,500,000 |
-| Lọc theo loại log | Success/Error/Warning/Info | 1,500,000 |
-| Tìm kiếm logs | Search functionality | 1,500,000 |
-| Export logs | CSV/JSON export | 1,500,000 |
-| **Tổng phụ** | | **7,000,000** |
-
-#### 1.9 Portfolio
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Tổng quan tài sản | Holdings overview | 2,500,000 |
-| Lịch sử giao dịch | Transaction history | 2,000,000 |
-| P&L tracking | Profit/Loss calculation | 3,000,000 |
-| **Tổng phụ** | | **7,500,000** |
-
-#### 1.10 Settings
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Profile settings | Cập nhật thông tin | 1,500,000 |
-| Trading settings | Default SL/TP, leverage | 2,000,000 |
-| Notifications | Email/Push notifications | 2,000,000 |
-| **Tổng phụ** | | **5,500,000** |
-
-**TỔNG FRONTEND: 85,000,000 VNĐ**
+| Tính năng | Mô tả chi tiết | Giá (VNĐ) |
+|-----------|----------------|-----------|
+| **Authentication** | Login, Register, Forgot Password với JWT | 1,200,000 |
+| **Dashboard** | Tổng quan 4 cards thống kê (Bots, Orders, Success Rate) | 800,000 |
+| **Exchange Keys** | Quản lý API keys Binance/Bittrex, Test connection | 1,000,000 |
+| **Bot Configs** | CRUD bot configs, Modal form 9 fields, Table listing | 1,200,000 |
+| **Trading (Đặt Lệnh)** | Market/Limit orders, SL/TP, Conditional inputs | 1,500,000 |
+| **Orders** | Danh sách lệnh, Filter, Pagination | 800,000 |
+| **Monitoring** | Real-time bot status, Active positions, Charts | 1,000,000 |
+| **Logs** | System logs với filters, Search, Export | 700,000 |
+| **Portfolio** | Holdings overview, P&L tracking | 600,000 |
+| **Settings** | Profile, Trading settings, Notifications | 500,000 |
+| **UI/UX Design** | Responsive, Purple gradient theme, Tailwind CSS | 700,000 |
+| **TỔNG FRONTEND** | | **10,000,000** |
 
 ---
 
 ### 2. BACKEND - API & TRADING ENGINE
 
-#### 2.1 Core API
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| RESTful API | Golang + Gin framework | 10,000,000 |
-| JWT Authentication | Secure authentication | 3,000,000 |
-| Database design | PostgreSQL schema | 5,000,000 |
-| Redis caching | Performance optimization | 3,000,000 |
-| API documentation | Swagger/OpenAPI | 2,000,000 |
-| **Tổng phụ** | | **23,000,000** |
-
-#### 2.2 Exchange Integration
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Binance API integration | Trading, market data | 8,000,000 |
-| Bittrex API integration | Trading, market data | 8,000,000 |
-| WebSocket real-time | Price updates | 5,000,000 |
-| Error handling | Retry logic, fallback | 3,000,000 |
-| **Tổng phụ** | | **24,000,000** |
-
-#### 2.3 Trading Engine
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Automated trading logic | Bot execution engine | 15,000,000 |
-| Stop Loss execution | Tự động cắt lỗ | 5,000,000 |
-| Take Profit execution | Tự động chốt lời | 5,000,000 |
-| Order monitoring | Theo dõi lệnh real-time | 6,000,000 |
-| Risk management | Position sizing, limits | 5,000,000 |
-| **Tổng phụ** | | **36,000,000** |
-
-#### 2.4 Data Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| User management | CRUD operations | 3,000,000 |
-| Bot configs | CRUD + validation | 3,000,000 |
-| Orders history | Storage & retrieval | 3,000,000 |
-| Transactions tracking | P&L calculation | 4,000,000 |
-| Logs storage | System logs database | 2,000,000 |
-| **Tổng phụ** | | **15,000,000** |
-
-#### 2.5 WebSocket Server
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Real-time updates | Price, orders, positions | 6,000,000 |
-| Connection management | Handle 1000+ clients | 4,000,000 |
-| **Tổng phụ** | | **10,000,000** |
-
-**TỔNG BACKEND: 108,000,000 VNĐ**
+| Tính năng | Mô tả chi tiết | Giá (VNĐ) |
+|-----------|----------------|-----------|
+| **Core API** | RESTful API với Golang + Gin framework | 2,500,000 |
+| **Authentication** | JWT, Password hashing, Session management | 800,000 |
+| **Database** | PostgreSQL schema design, Migrations | 1,200,000 |
+| **Redis Cache** | Caching cho performance | 600,000 |
+| **Binance Integration** | API integration, WebSocket real-time prices | 2,000,000 |
+| **Bittrex Integration** | API integration, WebSocket real-time prices | 2,000,000 |
+| **Trading Engine** | Automated trading logic, Order execution | 3,500,000 |
+| **Stop Loss/Take Profit** | Tự động cắt lỗ và chốt lời | 1,500,000 |
+| **Order Management** | Create, Cancel, Monitor orders | 1,200,000 |
+| **WebSocket Server** | Real-time updates cho frontend | 1,200,000 |
+| **Risk Management** | Position sizing, Leverage limits | 800,000 |
+| **Logs & Monitoring** | System logs, Error tracking | 500,000 |
+| **TỔNG BACKEND** | | **17,800,000** |
 
 ---
 
 ### 3. BACKOFFICE - HỆ THỐNG QUẢN TRỊ
 
-#### 3.1 Admin Authentication
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Admin login | Secure admin access | 2,000,000 |
-| Role-based access | Admin/Super Admin roles | 3,000,000 |
-| **Tổng phụ** | | **5,000,000** |
-
-#### 3.2 User Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Danh sách users | Table với pagination | 3,000,000 |
-| Suspend/Activate users | User control | 2,000,000 |
-| View user details | Full information | 2,000,000 |
-| User statistics | Charts & reports | 3,000,000 |
-| **Tổng phụ** | | **10,000,000** |
-
-#### 3.3 Subscription Management
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Gói subscription | Plan management | 3,000,000 |
-| Billing history | Payment tracking | 3,000,000 |
-| Revenue reports | Analytics | 4,000,000 |
-| **Tổng phụ** | | **10,000,000** |
-
-#### 3.4 System Monitoring
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| System health | Server status | 3,000,000 |
-| Trading statistics | Overall metrics | 3,000,000 |
-| Error monitoring | System errors tracking | 3,000,000 |
-| **Tổng phụ** | | **9,000,000** |
-
-#### 3.5 Reports & Analytics
-| Tính năng | Mô tả | Giá (VNĐ) |
-|-----------|-------|-----------|
-| Trading reports | Daily/Weekly/Monthly | 4,000,000 |
-| User activity | Usage analytics | 3,000,000 |
-| Export reports | PDF/Excel export | 2,000,000 |
-| **Tổng phụ** | | **9,000,000** |
-
-**TỔNG BACKOFFICE: 43,000,000 VNĐ**
+| Tính năng | Mô tả chi tiết | Giá (VNĐ) |
+|-----------|----------------|-----------|
+| **Admin Dashboard** | Tổng quan hệ thống, Statistics | 800,000 |
+| **User Management** | Danh sách users, Suspend/Activate | 1,000,000 |
+| **Subscription Management** | Quản lý gói, Billing history | 800,000 |
+| **System Monitoring** | Server health, Trading stats | 600,000 |
+| **Reports** | Daily/Weekly/Monthly reports | 500,000 |
+| **TỔNG BACKOFFICE** | | **3,700,000** |
 
 ---
 
@@ -215,15 +75,13 @@ TraderCoin là một nền tảng giao dịch cryptocurrency tự động hoàn 
 
 | Tính năng | Mô tả | Giá (VNĐ) |
 |-----------|-------|-----------|
-| Docker containers | Containerization | 3,000,000 |
-| Docker Compose setup | Development environment | 2,000,000 |
-| Database migration | Schema versioning | 2,000,000 |
-| Environment config | .env setup cho prod/dev | 1,000,000 |
-| CI/CD setup | GitHub Actions | 3,000,000 |
-| Server deployment | AWS/GCP/Azure setup | 4,000,000 |
-| SSL certificate | HTTPS setup | 1,000,000 |
-| Domain configuration | DNS setup | 500,000 |
-| **Tổng** | | **16,500,000** |
+| Docker Setup | Containerization tất cả services | 800,000 |
+| Docker Compose | Development environment | 400,000 |
+| Database Migration | Schema versioning | 300,000 |
+| Environment Config | Production/Development setup | 200,000 |
+| Server Deployment | Deploy lên VPS/Cloud | 800,000 |
+| SSL & Domain | HTTPS setup, DNS configuration | 300,000 |
+| **TỔNG** | | **2,800,000** |
 
 ---
 
@@ -231,25 +89,11 @@ TraderCoin là một nền tảng giao dịch cryptocurrency tự động hoàn 
 
 | Tính năng | Mô tả | Giá (VNĐ) |
 |-----------|-------|-----------|
-| Unit testing | Backend tests | 5,000,000 |
-| Integration testing | API tests | 4,000,000 |
-| E2E testing | Frontend tests | 4,000,000 |
-| User manual | Hướng dẫn sử dụng | 3,000,000 |
-| Technical docs | Developer documentation | 3,000,000 |
-| API documentation | Swagger/Postman | 2,000,000 |
-| **Tổng** | | **21,000,000** |
-
----
-
-### 6. BẢO HÀNH & HỖ TRỢ
-
-| Dịch vụ | Mô tả | Giá (VNĐ) |
-|---------|-------|-----------|
-| Bảo hành 3 tháng | Bug fixes miễn phí | Miễn phí |
-| Hỗ trợ kỹ thuật | Email/Chat support | Miễn phí |
-| Training | Đào tạo sử dụng hệ thống | 5,000,000 |
-| Handover | Bàn giao source code & docs | 3,000,000 |
-| **Tổng** | | **8,000,000** |
+| Testing | API testing, Bug fixes | 1,000,000 |
+| User Manual | Hướng dẫn sử dụng (PDF/Video) | 500,000 |
+| API Documentation | Swagger/Postman collection | 400,000 |
+| Training | Đào tạo sử dụng hệ thống | 500,000 |
+| **TỔNG** | | **2,400,000** |
 
 ---
 
@@ -257,103 +101,158 @@ TraderCoin là một nền tảng giao dịch cryptocurrency tự động hoàn 
 
 | Hạng mục | Giá (VNĐ) | USD (est.) |
 |----------|-----------|------------|
-| Frontend | 85,000,000 | $3,400 |
-| Backend | 108,000,000 | $4,320 |
-| Backoffice | 43,000,000 | $1,720 |
-| Deployment & Infrastructure | 16,500,000 | $660 |
-| Testing & Documentation | 21,000,000 | $840 |
-| Bảo hành & Hỗ trợ | 8,000,000 | $320 |
-| **TỔNG CỘNG** | **281,500,000** | **$11,260** |
+| Frontend (9 trang) | 10,000,000 | $400 |
+| Backend & Trading Engine | 17,800,000 | $712 |
+| Backoffice | 3,700,000 | $148 |
+| Deployment & Infrastructure | 2,800,000 | $112 |
+| Testing & Documentation | 2,400,000 | $96 |
+| **TỔNG CỘNG** | **36,700,000** | **$1,468** |
 
-### CHIẾT KHẤU (nếu thanh toán full)
-- Giảm 10%: **253,350,000 VNĐ** (~$10,134 USD)
+### 🎁 ƯU ĐÃI ĐẶC BIỆT
+
+#### Gói 1: STANDARD (Phù hợp với startup)
+**Giá: 25,000,000 VNĐ** (~$1,000)
+- Đầy đủ Frontend 9 trang
+- Backend API cơ bản
+- Binance integration (chỉ 1 sàn)
+- Trading Engine đơn giản
+- Backoffice cơ bản
+- Deploy + Training
+- Bảo hành 2 tháng
+
+#### Gói 2: PROFESSIONAL (Khuyến nghị) ⭐
+**Giá: 30,000,000 VNĐ** (~$1,200)
+- Đầy đủ Frontend 9 trang
+- Backend API hoàn chỉnh
+- Binance + Bittrex integration (2 sàn)
+- Trading Engine nâng cao với SL/TP
+- Backoffice đầy đủ
+- WebSocket real-time
+- Deploy + Training
+- Bảo hành 3 tháng
+
+#### Gói 3: ENTERPRISE (Full features)
+**Giá: 36,700,000 VNĐ** (~$1,468)
+- Tất cả tính năng Professional
+- Risk Management nâng cao
+- Advanced Analytics & Reports
+- Priority Support
+- CI/CD Pipeline
+- Load Balancing
+- Bảo hành 6 tháng
+
+---
+
+## SO SÁNH VỚI THỊ TRƯỜNG
+
+| Dự án | Tính năng | Giá thị trường | Giá của chúng tôi | Tiết kiệm |
+|-------|-----------|----------------|-------------------|-----------|
+| Crypto Trading Bot cơ bản | 1 sàn, Basic UI | 15-20 triệu | **25 triệu** (2 sàn, Pro UI) | 0 |
+| Platform tương tự | 2 sàn, Standard | 40-50 triệu | **30 triệu** | 10-20 triệu |
+| Enterprise Solution | Full features | 80-100 triệu | **36.7 triệu** | 43-63 triệu |
 
 ---
 
 ## PHƯƠNG THỨC THANH TOÁN
 
-### Gói 1: Thanh toán theo tiến độ
-- **Đợt 1 (30%):** Ký hợp đồng - 84,450,000 VNĐ
-- **Đợt 2 (30%):** Hoàn thành UI/UX + Backend API - 84,450,000 VNĐ
-- **Đợt 3 (30%):** Hoàn thành Trading Engine - 84,450,000 VNĐ
-- **Đợt 4 (10%):** Deploy & Bàn giao - 28,150,000 VNĐ
+### Option 1: Thanh toán theo giai đoạn
+- **Đợt 1 (40%):** Ký hợp đồng + Setup
+- **Đợt 2 (40%):** Hoàn thành phát triển
+- **Đợt 3 (20%):** Deploy & Bàn giao
 
-### Gói 2: Thanh toán full (có chiết khấu)
-- **1 lần:** 253,350,000 VNĐ (giảm 10%)
+### Option 2: Thanh toán trước (có giảm giá)
+- Giảm thêm **5%** khi thanh toán full
+- Gói Standard: **23,750,000 VNĐ**
+- Gói Professional: **28,500,000 VNĐ**
+- Gói Enterprise: **34,865,000 VNĐ**
 
 ---
 
 ## TIMELINE THỰC HIỆN
 
-| Giai đoạn | Thời gian | Công việc |
-|-----------|-----------|-----------|
-| **Tuần 1-2** | 2 tuần | Setup project, Database design, UI/UX wireframe |
-| **Tuần 3-5** | 3 tuần | Frontend development (Dashboard, Trading, Orders) |
-| **Tuần 6-8** | 3 tuần | Backend API & Exchange integration |
-| **Tuần 9-10** | 2 tuần | Trading Engine & WebSocket |
-| **Tuần 11** | 1 tuần | Backoffice development |
-| **Tuần 12** | 1 tuần | Testing, Bug fixes, Deployment |
-
-**Tổng: 12 tuần (3 tháng)**
+| Giai đoạn | Gói Standard | Gói Professional | Gói Enterprise |
+|-----------|--------------|------------------|----------------|
+| Setup & Design | 1 tuần | 1 tuần | 1 tuần |
+| Frontend Development | 2 tuần | 2.5 tuần | 3 tuần |
+| Backend & API | 2 tuần | 2.5 tuần | 3 tuần |
+| Testing & Deploy | 1 tuần | 1 tuần | 1 tuần |
+| **TỔNG** | **6 tuần** | **7 tuần** | **8 tuần** |
 
 ---
 
 ## CÔNG NGHỆ SỬ DỤNG
 
 ### Frontend
-- **Framework:** Next.js 14
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Icons:** Heroicons
-- **State Management:** React Hooks
+- Next.js 14 + TypeScript
+- Tailwind CSS + Heroicons
+- Responsive Design
 
 ### Backend
-- **Language:** Golang
-- **Framework:** Gin
-- **Database:** PostgreSQL
-- **Cache:** Redis
-- **Authentication:** JWT
+- Golang + Gin Framework
+- PostgreSQL Database
+- Redis Cache
+- JWT Authentication
+
+### Exchange APIs
+- Binance API (Spot + Futures)
+- Bittrex API (Spot)
+- WebSocket Real-time
 
 ### DevOps
-- **Containerization:** Docker
-- **Orchestration:** Docker Compose
-- **CI/CD:** GitHub Actions
-- **Cloud:** AWS/GCP/Azure
+- Docker + Docker Compose
+- GitHub Actions (CI/CD)
+- VPS/Cloud deployment
 
 ---
 
-## YÊU CẦU HỆ THỐNG
+## TẠI SAO CHỌN CHÚNG TÔI?
 
-### Server Requirements (Minimum)
-- **CPU:** 4 cores
-- **RAM:** 8GB
-- **Storage:** 100GB SSD
-- **Bandwidth:** 100Mbps
-
-### Server Requirements (Recommended)
-- **CPU:** 8 cores
-- **RAM:** 16GB
-- **Storage:** 200GB SSD
-- **Bandwidth:** 1Gbps
+✅ **Giá cạnh tranh:** Chỉ 25-30 triệu cho giải pháp hoàn chỉnh  
+✅ **Chất lượng cao:** Code sạch, chuẩn industry standard  
+✅ **Giao hàng đúng hạn:** 6-8 tuần  
+✅ **Bảo hành lâu dài:** 2-6 tháng tùy gói  
+✅ **Hỗ trợ tận tình:** Training + Documentation đầy đủ  
+✅ **Source code:** Bàn giao 100% quyền sở hữu  
 
 ---
 
-## ĐIỀU KHOẢN & ĐIỀU KIỆN
+## YÊU CẦU HỆ THỐNG (Khách tự chuẩn bị)
 
-1. **Source Code:** Bàn giao full source code sau khi thanh toán 100%
-2. **Bảo hành:** 3 tháng kể từ ngày bàn giao
-3. **Hỗ trợ:** Email/Chat support trong giờ hành chính
-4. **Thay đổi:** Mọi thay đổi phạm vi sẽ được báo giá riêng
-5. **Hủy dự án:** Khách hàng phải thanh toán phần công việc đã hoàn thành
+### Server VPS/Cloud
+- **CPU:** 2-4 cores
+- **RAM:** 4-8GB
+- **Storage:** 50GB SSD
+- **Chi phí:** ~200,000-500,000 VNĐ/tháng
+
+### Domain & SSL
+- Domain: ~300,000 VNĐ/năm
+- SSL: Free (Let's Encrypt)
 
 ---
 
-## BẢO MẬT & BẢN QUYỀN
+## ĐIỀU KHOẢN
 
-- Source code thuộc quyền sở hữu của khách hàng sau khi thanh toán full
-- Ký NDA (Non-Disclosure Agreement) trước khi bắt đầu
-- Mọi dữ liệu khách hàng được bảo mật tuyệt đối
-- API keys và secrets không được lưu trong source code
+1. **Source Code:** Bàn giao full sau khi thanh toán 100%
+2. **Bảo hành:** Miễn phí theo gói đã chọn
+3. **Thay đổi yêu cầu:** Phát sinh ngoài phạm vi sẽ báo giá thêm
+4. **Hủy dự án:** Thanh toán phần đã hoàn thành theo %
+
+---
+
+## ĐIỂM KHÁC BIỆT SO VỚI ĐỐI THỦ 23 TRIỆU
+
+| Tiêu chí | Đối thủ (23tr) | Chúng tôi (25-30tr) |
+|----------|----------------|---------------------|
+| **Số trang Frontend** | 5-6 trang | **9 trang đầy đủ** |
+| **Số sàn giao dịch** | 1 sàn | **2 sàn (Binance + Bittrex)** |
+| **UI/UX Design** | Basic, template | **Custom, gradient theme** |
+| **Trading Engine** | Đơn giản | **Nâng cao với SL/TP tự động** |
+| **Backoffice** | Không có | **Có hệ thống quản trị** |
+| **WebSocket** | Không | **Có real-time updates** |
+| **Testing** | Cơ bản | **Đầy đủ + Bug fixes** |
+| **Documentation** | Ít | **Chi tiết (User + Dev docs)** |
+| **Bảo hành** | 1 tháng | **2-6 tháng** |
+| **Training** | Không | **Có đào tạo sử dụng** |
 
 ---
 
@@ -361,10 +260,28 @@ TraderCoin là một nền tảng giao dịch cryptocurrency tự động hoàn 
 
 **Email:** contact@tradercoin.com  
 **Phone:** +84 xxx xxx xxx  
-**Website:** https://tradercoin.com
+**GitHub:** https://github.com/khaicafe/TraderCoin
 
 ---
 
-*Báo giá có hiệu lực trong 30 ngày kể từ ngày phát hành*  
+## KẾT LUẬN
+
+Với **chỉ 25-30 triệu VNĐ**, bạn nhận được:
+- ✅ Nền tảng trading bot hoàn chỉnh
+- ✅ 9 trang frontend đẹp mắt
+- ✅ 2 sàn giao dịch (Binance + Bittrex)
+- ✅ Trading engine tự động thông minh
+- ✅ Backoffice quản trị
+- ✅ Source code + bảo hành + training
+
+**Tổng giá trị thực tế: 40-50 triệu**  
+**Giá ưu đãi của chúng tôi: 25-30 triệu**  
+**Tiết kiệm: 10-20 triệu VNĐ!**
+
+---
+
+*Báo giá có hiệu lực trong 30 ngày*  
 *Giá chưa bao gồm VAT (10%)*  
-*Chi phí server/hosting tính riêng theo thực tế*
+*Chi phí server/hosting tính riêng (~200-500k/tháng)*
+
+**🚀 Sẵn sàng bắt đầu? Liên hệ ngay để được tư vấn chi tiết!**

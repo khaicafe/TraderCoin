@@ -1,39 +1,41 @@
 package database
 
 import (
-	"database/sql"
-	"fmt"
 	"log"
+	"time"
+	"tradercoin/backend/models"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // SeedData creates sample admin and user accounts for testing
-func SeedData(db *sql.DB) error {
+func SeedData(db *gorm.DB) error {
 	log.Println("Starting to seed sample data...")
 
 	// Check if admin already exists
-	var adminCount int
-	err := db.QueryRow("SELECT COUNT(*) FROM admins WHERE email = ?", "admin@tradercoin.com").Scan(&adminCount)
-	if err != nil {
-		return fmt.Errorf("failed to check admin: %v", err)
-	}
+	var adminCount int64
+	db.Model(&models.Admin{}).Where("email = ?", "admin@tradercoin.com").Count(&adminCount)
 
 	if adminCount == 0 {
 		// Create admin account
 		adminPassword := "admin123"
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 		if err != nil {
-			return fmt.Errorf("failed to hash admin password: %v", err)
+			log.Printf("Failed to hash admin password: %v", err)
+			return err
 		}
 
-		_, err = db.Exec(`
-			INSERT INTO admins (email, password_hash, full_name, role)
-			VALUES (?, ?, ?, ?)
-		`, "admin@tradercoin.com", string(hashedPassword), "System Administrator", "admin")
+		admin := models.Admin{
+			Email:        "admin@tradercoin.com",
+			PasswordHash: string(hashedPassword),
+			FullName:     "System Administrator",
+			Role:         "admin",
+		}
 
-		if err != nil {
-			return fmt.Errorf("failed to create admin: %v", err)
+		if err := db.Create(&admin).Error; err != nil {
+			log.Printf("Failed to create admin: %v", err)
+			return err
 		}
 		log.Println("✅ Created admin account: admin@tradercoin.com / admin123")
 	} else {
@@ -41,27 +43,31 @@ func SeedData(db *sql.DB) error {
 	}
 
 	// Check if user already exists
-	var userCount int
-	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", "user@example.com").Scan(&userCount)
-	if err != nil {
-		return fmt.Errorf("failed to check user: %v", err)
-	}
+	var userCount int64
+	db.Model(&models.User{}).Where("email = ?", "user@example.com").Count(&userCount)
 
 	if userCount == 0 {
 		// Create sample user account
 		userPassword := "user123"
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userPassword), bcrypt.DefaultCost)
 		if err != nil {
-			return fmt.Errorf("failed to hash user password: %v", err)
+			log.Printf("Failed to hash user password: %v", err)
+			return err
 		}
 
-		_, err = db.Exec(`
-			INSERT INTO users (email, password_hash, full_name, phone, status, subscription_end)
-			VALUES (?, ?, ?, ?, ?, datetime('now', '+30 days'))
-		`, "user@example.com", string(hashedPassword), "John Doe", "+1234567890", "active")
+		subscriptionEnd := time.Now().AddDate(0, 0, 30) // 30 days from now
+		user := models.User{
+			Email:           "user@example.com",
+			PasswordHash:    string(hashedPassword),
+			FullName:        "John Doe",
+			Phone:           "+1234567890",
+			Status:          "active",
+			SubscriptionEnd: &subscriptionEnd,
+		}
 
-		if err != nil {
-			return fmt.Errorf("failed to create user: %v", err)
+		if err := db.Create(&user).Error; err != nil {
+			log.Printf("Failed to create user: %v", err)
+			return err
 		}
 		log.Println("✅ Created user account: user@example.com / user123")
 	} else {

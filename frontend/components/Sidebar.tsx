@@ -16,7 +16,7 @@ import {
 
 const navigation = [
   {name: 'Dashboard', href: '/dashboard', icon: HomeIcon},
-  {name: 'Exchange Keys', href: '/exchange-keys', icon: KeyIcon},
+  // {name: 'Exchange Keys', href: '/exchange-keys', icon: KeyIcon},
   {name: 'Bot Configs', href: '/bot-configs', icon: CogIcon},
   {name: 'Đặt Lệnh', href: '/trading', icon: ChartBarIcon},
   {name: 'Orders', href: '/orders', icon: ClipboardDocumentListIcon},

@@ -1,72 +1,115 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type User struct {
-	ID              int       `json:"id"`
-	Email           string    `json:"email"`
-	PasswordHash    string    `json:"-"`
-	FullName        string    `json:"full_name"`
-	Phone           string    `json:"phone"`
-	Status          string    `json:"status"`
-	SubscriptionEnd time.Time `json:"subscription_end"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	Email           string         `gorm:"uniqueIndex;not null;size:255" json:"email"`
+	PasswordHash    string         `gorm:"not null;size:255" json:"-"`
+	FullName        string         `gorm:"size:255" json:"full_name"`
+	Phone           string         `gorm:"size:50" json:"phone"`
+	Status          string         `gorm:"size:50;default:active" json:"status"`
+	SubscriptionEnd *time.Time     `json:"subscription_end"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	ExchangeKeys   []ExchangeKey   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+	TradingConfigs []TradingConfig `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+	Orders         []Order         `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+	Transactions   []Transaction   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
 type ExchangeKey struct {
-	ID        int       `json:"id"`
-	UserID    int       `json:"user_id"`
-	Exchange  string    `json:"exchange"`
-	APIKey    string    `json:"api_key"`
-	APISecret string    `json:"-"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	UserID    uint           `gorm:"not null;index:idx_user_exchange,unique" json:"user_id"`
+	Exchange  string         `gorm:"not null;size:50;index:idx_user_exchange,unique" json:"exchange"`
+	APIKey    string         `gorm:"not null;size:255" json:"api_key"`
+	APISecret string         `gorm:"not null;size:255" json:"-"`
+	IsActive  bool           `gorm:"default:true" json:"is_active"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
 type TradingConfig struct {
-	ID                int       `json:"id"`
-	UserID            int       `json:"user_id"`
-	Exchange          string    `json:"exchange"`
-	Symbol            string    `json:"symbol"`
-	StopLossPercent   float64   `json:"stop_loss_percent"`
-	TakeProfitPercent float64   `json:"take_profit_percent"`
-	IsActive          bool      `json:"is_active"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID                uint           `gorm:"primaryKey" json:"id"`
+	UserID            uint           `gorm:"not null;index" json:"user_id"`
+	Name              string         `gorm:"size:100" json:"name"` // Bot name
+	Exchange          string         `gorm:"not null;size:50" json:"exchange"`
+	Symbol            string         `gorm:"not null;size:50" json:"symbol"`
+	Amount            float64        `gorm:"type:decimal(10,2)" json:"amount"`
+	TradingMode       string         `gorm:"size:20;default:'spot'" json:"trading_mode"` // spot, futures, margin
+	Leverage          int            `gorm:"default:1" json:"leverage"`                  // Leverage for futures/margin trading (1-125)
+	APIKey            string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
+	APISecret         string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
+	StopLossPercent   float64        `gorm:"type:decimal(10,2)" json:"stop_loss_percent"`
+	TakeProfitPercent float64        `gorm:"type:decimal(10,2)" json:"take_profit_percent"`
+	IsDefault         bool           `gorm:"default:false" json:"is_default"` // Only one default bot per user
+	IsActive          bool           `gorm:"default:true" json:"is_active"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
 type Order struct {
-	ID        int       `json:"id"`
-	UserID    int       `json:"user_id"`
-	Exchange  string    `json:"exchange"`
-	Symbol    string    `json:"symbol"`
-	OrderID   string    `json:"order_id"`
-	Side      string    `json:"side"`
-	Type      string    `json:"type"`
-	Quantity  float64   `json:"quantity"`
-	Price     float64   `json:"price"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	UserID          uint           `gorm:"not null;index" json:"user_id"`
+	BotConfigID     uint           `gorm:"index" json:"bot_config_id"` // Link to TradingConfig
+	Exchange        string         `gorm:"not null;size:50" json:"exchange"`
+	Symbol          string         `gorm:"not null;size:50" json:"symbol"`
+	OrderID         string         `gorm:"size:255" json:"order_id"`
+	Side            string         `gorm:"not null;size:10" json:"side"`
+	Type            string         `gorm:"not null;size:20" json:"type"`
+	Quantity        float64        `gorm:"type:decimal(20,8)" json:"quantity"`
+	Price           float64        `gorm:"type:decimal(20,8)" json:"price"`
+	FilledPrice     float64        `gorm:"type:decimal(20,8)" json:"filled_price"`
+	Status          string         `gorm:"size:50;default:pending" json:"status"`
+	TradingMode     string         `gorm:"size:20;default:spot" json:"trading_mode"` // spot, futures, margin
+	Leverage        int            `gorm:"default:1" json:"leverage"`
+	StopLossPrice   float64        `gorm:"type:decimal(20,8)" json:"stop_loss_price"`
+	TakeProfitPrice float64        `gorm:"type:decimal(20,8)" json:"take_profit_price"`
+	PnL             float64        `gorm:"type:decimal(20,8)" json:"pnl"`
+	PnLPercent      float64        `gorm:"type:decimal(10,2)" json:"pnl_percent"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
 type Transaction struct {
-	ID          int       `json:"id"`
-	UserID      int       `json:"user_id"`
-	Amount      float64   `json:"amount"`
-	Type        string    `json:"type"`
-	Status      string    `json:"status"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	UserID      uint           `gorm:"not null;index" json:"user_id"`
+	Amount      float64        `gorm:"type:decimal(10,2);not null" json:"amount"`
+	Type        string         `gorm:"not null;size:50" json:"type"`
+	Status      string         `gorm:"size:50;default:pending" json:"status"`
+	Description string         `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
 type Admin struct {
-	ID           int       `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	FullName     string    `json:"full_name"`
-	Role         string    `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	Email        string         `gorm:"uniqueIndex;not null;size:255" json:"email"`
+	PasswordHash string         `gorm:"not null;size:255" json:"-"`
+	FullName     string         `gorm:"size:255" json:"full_name"`
+	Role         string         `gorm:"size:50;default:admin" json:"role"`
+	CreatedAt    time.Time      `json:"created_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 }

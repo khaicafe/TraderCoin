@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import {useRouter} from 'next/navigation';
 import Link from 'next/link';
+import {register} from '../../services/authService';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -28,32 +29,20 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/register`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password,
-            full_name: formData.fullName,
-            phone: formData.phone,
-          }),
-        },
-      );
+      await register({
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.fullName,
+        phone: formData.phone,
+      });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Registration failed');
-      }
-
-      // Redirect to login
-      router.push('/login?registered=true');
+      // Redirect to dashboard
+      // Redirect to dashboard
+      router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      setError(
+        err.response?.data?.error || err.message || 'Registration failed',
+      );
     } finally {
       setLoading(false);
     }

@@ -4,10 +4,12 @@ import (
 	"log"
 	"os"
 
+	"tradercoin/backend/config"
 	"tradercoin/backend/database"
 	"tradercoin/backend/middleware"
 	api "tradercoin/backend/routes"
 	"tradercoin/backend/services"
+	"tradercoin/backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -19,12 +21,25 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	// Initialize database
+	// Load configuration
+	cfg := config.Load()
+
+	// Initialize encryption key for API credentials
+	utils.InitEncryptionKey(cfg.EncryptionKey)
+	log.Println("Encryption initialized for API credentials")
+
+	// Initialize database with GORM
 	db, err := database.Connect()
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	defer db.Close()
+
+	// Get underlying SQL DB for connection management
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal("Failed to get database instance:", err)
+	}
+	defer sqlDB.Close()
 
 	// Initialize Redis (optional)
 	redisClient := database.InitRedis()
@@ -64,7 +79,20 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on port %s", port)
+	// Display configuration info
+	log.Println("========================================")
+	log.Printf("🚀 Server Configuration:")
+	log.Printf("   - Port: %s", port)
+	log.Printf("   - Database: %s", cfg.DBType)
+	if cfg.DBType == "sqlite" {
+		log.Printf("   - SQLite Path: %s", cfg.DBPath)
+	} else if cfg.DBType == "postgresql" {
+		log.Printf("   - PostgreSQL Host: %s:%s", cfg.PostgresHost, cfg.PostgresPort)
+		log.Printf("   - PostgreSQL DB: %s", cfg.PostgresDB)
+	}
+	log.Println("========================================")
+
+	log.Printf("🌐 Server starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
