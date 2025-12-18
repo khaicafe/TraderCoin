@@ -14,21 +14,28 @@ import (
 // CreateBotConfig - Tạo bot configuration mới
 func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log.Printf("\n🔷 ===== CREATE BOT CONFIG - START =====")
+
 		// Get user ID from context
 		userID, exists := c.Get("user_id")
 		if !exists {
+			log.Printf("❌ Step 1: User authentication failed - no user_id in context")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 			return
 		}
+		log.Printf("✅ Step 1: User authenticated - UserID: %v", userID)
 
 		// Verify user exists
 		var user models.User
 		if err := services.DB.First(&user, userID).Error; err != nil {
+			log.Printf("❌ Step 2: User verification failed - User %v not found in database: %v", userID, err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
+		log.Printf("✅ Step 2: User verified - Email: %s, Name: %s", user.Email, user.FullName)
 
 		// Bind request data
+		log.Printf("📝 Step 3: Parsing request body...")
 		var input struct {
 			Name                  string                   `json:"name" binding:"required"`
 			Symbol                string                   `json:"symbol" binding:"required"`
@@ -38,8 +45,8 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 			Leverage              int                      `json:"leverage"`
 			APIKey                string                   `json:"api_key"`
 			APISecret             string                   `json:"api_secret"`
-			StopLossPercent       float64                  `json:"stop_loss_percent" binding:"required,gte=0,lte=100"`
-			TakeProfitPercent     float64                  `json:"take_profit_percent" binding:"required,gte=0,lte=1000"`
+			StopLossPercent       float64                  `json:"stop_loss_percent" binding:"gte=0,lte=100"`    // Optional, 0 = không dùng SL
+			TakeProfitPercent     float64                  `json:"take_profit_percent" binding:"gte=0,lte=1000"` // Optional, 0 = không dùng TP
 			TPLevels              []map[string]interface{} `json:"tp_levels"`
 			EnableTrailing        bool                     `json:"enable_trailing"`
 			TrailingType          string                   `json:"trailing_type"`
@@ -52,53 +59,87 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 		}
 
 		if err := c.ShouldBindJSON(&input); err != nil {
+			log.Printf("❌ Step 3: JSON binding failed - %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		log.Printf("✅ Step 3: Request body parsed successfully")
+		log.Printf("   📊 Config details:")
+		log.Printf("      - Name: %s", input.Name)
+		log.Printf("      - Symbol: %s", input.Symbol)
+		log.Printf("      - Exchange: %s", input.Exchange)
+		log.Printf("      - Amount: %.8f", input.Amount)
+		log.Printf("      - Trading Mode: %s", input.TradingMode)
+		log.Printf("      - Leverage: %d", input.Leverage)
+		log.Printf("      - Stop Loss %%: %.2f", input.StopLossPercent)
+		log.Printf("      - Take Profit %%: %.2f", input.TakeProfitPercent)
+		log.Printf("      - API Key provided: %t", input.APIKey != "")
+		log.Printf("      - API Secret provided: %t", input.APISecret != "")
 
 		// Validate exchange
+		log.Printf("🔍 Step 4: Validating exchange...")
 		if input.Exchange != "binance" && input.Exchange != "bittrex" {
+			log.Printf("❌ Step 4: Invalid exchange '%s' - must be 'binance' or 'bittrex'", input.Exchange)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid exchange. Must be 'binance' or 'bittrex'"})
 			return
 		}
+		log.Printf("✅ Step 4: Exchange '%s' validated", input.Exchange)
 
 		// Validate trading mode if provided
+		log.Printf("🔍 Step 5: Validating trading mode...")
 		if input.TradingMode != "" {
 			if input.TradingMode != "spot" && input.TradingMode != "futures" && input.TradingMode != "margin" {
+				log.Printf("❌ Step 5: Invalid trading mode '%s' - must be 'spot', 'futures', or 'margin'", input.TradingMode)
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trading mode. Must be 'spot', 'futures', or 'margin'"})
 				return
 			}
+			log.Printf("✅ Step 5: Trading mode '%s' validated", input.TradingMode)
 		} else {
 			input.TradingMode = "spot" // Default to spot
+			log.Printf("✅ Step 5: Trading mode not provided, defaulting to 'spot'")
 		}
 
 		// Validate leverage
+		log.Printf("🔍 Step 6: Validating leverage...")
+		originalLeverage := input.Leverage
 		if input.Leverage < 1 || input.Leverage > 125 {
 			input.Leverage = 1 // Default to 1x
+			log.Printf("⚠️  Step 6: Leverage %d out of range (1-125), defaulting to 1x", originalLeverage)
+		} else {
+			log.Printf("✅ Step 6: Leverage %dx validated", input.Leverage)
 		}
 
 		// Encrypt API credentials if provided
+		log.Printf("🔐 Step 7: Encrypting API credentials...")
 		var encryptedAPIKey, encryptedAPISecret string
 		var err error
 		if input.APIKey != "" {
 			encryptedAPIKey, err = utils.EncryptString(input.APIKey)
 			if err != nil {
-				log.Printf("Failed to encrypt API key: %v", err)
+				log.Printf("❌ Step 7: Failed to encrypt API key: %v", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt API credentials"})
 				return
 			}
+			log.Printf("✅ Step 7a: API Key encrypted successfully (length: %d)", len(encryptedAPIKey))
+		} else {
+			log.Printf("⚠️  Step 7a: No API Key provided")
 		}
 		if input.APISecret != "" {
 			encryptedAPISecret, err = utils.EncryptString(input.APISecret)
 			if err != nil {
-				log.Printf("Failed to encrypt API secret: %v", err)
+				log.Printf("❌ Step 7b: Failed to encrypt API secret: %v", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt API credentials"})
 				return
 			}
+			log.Printf("✅ Step 7b: API Secret encrypted successfully (length: %d)", len(encryptedAPISecret))
+		} else {
+			log.Printf("⚠️  Step 7b: No API Secret provided")
 		}
 
 		// Create trading config
+		log.Printf("💾 Step 8: Creating bot config in database...")
 		config := models.TradingConfig{
+			Name:              input.Name,
 			UserID:            user.ID,
 			Symbol:            input.Symbol,
 			Exchange:          input.Exchange,
@@ -113,12 +154,27 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 		}
 
 		if err := services.DB.Create(&config).Error; err != nil {
-			log.Printf("Failed to create bot config: %v", err)
+			log.Printf("❌ Step 8: Database creation failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create configuration"})
 			return
 		}
 
-		log.Printf("Bot config created: %d - %s for user %d", config.ID, input.Name, user.ID)
+		log.Printf("✅ Step 8: Bot config created successfully in database")
+		log.Printf("   📋 Created config details:")
+		log.Printf("      - Config ID: %d", config.ID)
+		log.Printf("      - User ID: %d", config.UserID)
+		log.Printf("      - Symbol: %s", config.Symbol)
+		log.Printf("      - Exchange: %s", config.Exchange)
+		log.Printf("      - Trading Mode: %s", config.TradingMode)
+		log.Printf("      - Leverage: %dx", config.Leverage)
+		log.Printf("      - Amount: %.8f", config.Amount)
+		log.Printf("      - Stop Loss: %.2f%%", config.StopLossPercent)
+		log.Printf("      - Take Profit: %.2f%%", config.TakeProfitPercent)
+		log.Printf("      - Is Active: %t", config.IsActive)
+		log.Printf("      - Created At: %s", config.CreatedAt)
+
+		log.Printf("🎉 Step 9: Sending success response to client")
+		log.Printf("🔷 ===== CREATE BOT CONFIG - SUCCESS =====\n")
 
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "Bot configuration created successfully",

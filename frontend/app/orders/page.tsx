@@ -24,7 +24,7 @@ export default function OrdersPage() {
   const [stats, setStats] = useState({
     total: 0,
     filled: 0,
-    pending: 0,
+    New: 0,
     cancelled: 0,
   });
 
@@ -53,11 +53,22 @@ export default function OrdersPage() {
 
       // Calculate stats
       const total = data.length;
-      const filled = data.filter((o) => o.status === 'filled').length;
-      const pending = data.filter((o) => o.status === 'pending').length;
-      const cancelled = data.filter((o) => o.status === 'cancelled').length;
+      const filled = data.filter(
+        (o) =>
+          o.status?.toLowerCase() === 'filled' ||
+          o.status?.toLowerCase() === 'closed',
+      ).length;
+      const New = data.filter(
+        (o) =>
+          o.status?.toLowerCase() === 'New' ||
+          o.status?.toLowerCase() === 'open' ||
+          o.status?.toLowerCase() === 'new',
+      ).length;
+      const cancelled = data.filter(
+        (o) => o.status?.toLowerCase() === 'cancelled',
+      ).length;
 
-      setStats({total, filled, pending, cancelled});
+      setStats({total, filled, New, cancelled});
       setError(null);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
@@ -83,10 +94,21 @@ export default function OrdersPage() {
 
       // Update stats without touching loading
       const total = data.length;
-      const filled = data.filter((o) => o.status === 'filled').length;
-      const pending = data.filter((o) => o.status === 'pending').length;
-      const cancelled = data.filter((o) => o.status === 'cancelled').length;
-      setStats({total, filled, pending, cancelled});
+      const filled = data.filter(
+        (o) =>
+          o.status?.toLowerCase() === 'filled' ||
+          o.status?.toLowerCase() === 'closed',
+      ).length;
+      const New = data.filter(
+        (o) =>
+          o.status?.toLowerCase() === 'New' ||
+          o.status?.toLowerCase() === 'open' ||
+          o.status?.toLowerCase() === 'new',
+      ).length;
+      const cancelled = data.filter(
+        (o) => o.status?.toLowerCase() === 'cancelled',
+      ).length;
+      setStats({total, filled, New, cancelled});
     } catch (err) {
       // ignore transient errors
     }
@@ -151,11 +173,20 @@ export default function OrdersPage() {
 
             return {
               total: updatedOrders.length,
-              filled: updatedOrders.filter((o) => o.status === 'filled').length,
-              pending: updatedOrders.filter((o) => o.status === 'pending')
-                .length,
-              cancelled: updatedOrders.filter((o) => o.status === 'cancelled')
-                .length,
+              filled: updatedOrders.filter(
+                (o) =>
+                  o.status?.toLowerCase() === 'filled' ||
+                  o.status?.toLowerCase() === 'closed',
+              ).length,
+              New: updatedOrders.filter(
+                (o) =>
+                  o.status?.toLowerCase() === 'New' ||
+                  o.status?.toLowerCase() === 'open' ||
+                  o.status?.toLowerCase() === 'new',
+              ).length,
+              cancelled: updatedOrders.filter(
+                (o) => o.status?.toLowerCase() === 'cancelled',
+              ).length,
             };
           });
         },
@@ -311,7 +342,7 @@ export default function OrdersPage() {
         </div>
         <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Đang Chờ</p>
-          <p className="text-3xl font-bold mt-2">{stats.pending}</p>
+          <p className="text-3xl font-bold mt-2">{stats.New}</p>
         </div>
         <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Đã Hủy</p>
@@ -345,7 +376,7 @@ export default function OrdersPage() {
               onChange={(e) => setFilters({...filters, status: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900">
               <option value="">All</option>
-              <option value="pending">Pending</option>
+              <option value="New">New</option>
               <option value="filled">Filled</option>
               <option value="closed">Closed</option>
               <option value="cancelled">Cancelled</option>
@@ -434,7 +465,7 @@ export default function OrdersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Take Profit
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-lef`t text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -486,10 +517,10 @@ export default function OrdersPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
                       {order.type}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                       {order.quantity}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                       {order.filled_price
                         ? order.filled_price.toFixed(5)
                         : order.price.toFixed(5)}
@@ -596,11 +627,12 @@ export default function OrdersPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 text-xs font-semibold rounded capitalize ${
-                          order.status === 'filled' || order.status === 'closed'
+                          order.status?.toLowerCase() === 'filled' ||
+                          order.status?.toLowerCase() === 'closed'
                             ? 'bg-green-100 text-green-800'
-                            : order.status === 'pending'
+                            : order.status?.toLowerCase() === 'new'
                             ? 'bg-yellow-100 text-yellow-800'
-                            : order.status === 'cancelled'
+                            : order.status?.toLowerCase() === 'cancelled'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>

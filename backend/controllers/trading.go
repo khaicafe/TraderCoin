@@ -176,6 +176,37 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 					takeProfit = filledPrice * (1 - config.TakeProfitPercent/100)
 				}
 			}
+
+			// Place Stop Loss and Take Profit orders on Binance
+			if config.Exchange == "binance" && (stopLoss > 0 || takeProfit > 0) {
+				// Determine opposite side for closing position
+				closeSide := "sell"
+				if request.Side == "sell" {
+					closeSide = "buy"
+				}
+
+				// Place Stop Loss order
+				if stopLoss > 0 {
+					slResult := tradingService.PlaceStopLossOrder(&config, symbol, stopLoss, orderResult.Quantity, closeSide)
+					if slResult.Success {
+						log.Printf("✅ Stop Loss order placed: OrderID=%s, StopPrice=%.8f", slResult.OrderID, stopLoss)
+					} else {
+						log.Printf("⚠️ Failed to place Stop Loss order: %s", slResult.Error)
+						// Continue anyway, main order was successful
+					}
+				}
+
+				// Place Take Profit order
+				if takeProfit > 0 {
+					tpResult := tradingService.PlaceTakeProfitOrder(&config, symbol, takeProfit, orderResult.Quantity, closeSide)
+					if tpResult.Success {
+						log.Printf("✅ Take Profit order placed: OrderID=%s, TakeProfit=%.8f", tpResult.OrderID, takeProfit)
+					} else {
+						log.Printf("⚠️ Failed to place Take Profit order: %s", tpResult.Error)
+						// Continue anyway, main order was successful
+					}
+				}
+			}
 		}
 
 		// Create order record using the actual Order model fields
