@@ -9,8 +9,9 @@ import (
 )
 
 type Services struct {
-	DB    *gorm.DB
-	Redis *redis.Client
+	DB           *gorm.DB
+	Redis        *redis.Client
+	OrderMonitor *OrderMonitorService // Background worker for order status updates
 }
 
 // GetWebSocketUpgrader returns WebSocket upgrader with CORS settings

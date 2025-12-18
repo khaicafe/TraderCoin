@@ -500,6 +500,58 @@ func (h *WebSocketHub) updateOrderInDB(update *OrderUpdate) {
 	}
 }
 
+// BroadcastToUser sends a message to all tabs/sessions of a specific user
+func (hub *WebSocketHub) BroadcastToUser(userID uint, message WebSocketMessage) {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+
+	// Get all sessions for this user
+	sessions, exists := hub.UserSessions[userID]
+	if !exists || len(sessions) == 0 {
+		log.Printf("📭 No active sessions for user %d", userID)
+		return
+	}
+
+	messageData, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("❌ Failed to marshal WebSocket message: %v", err)
+		return
+	}
+
+	sentCount := 0
+
+	// Send to all exchange connections for this user
+	for connKey, exchConn := range hub.ExchangeConns {
+		if exchConn.UserID != userID {
+			continue
+		}
+
+		exchConn.mu.RLock()
+		for sessionID, userConn := range exchConn.UserTabs {
+			if userConn != nil {
+				if err := userConn.WriteMessage(websocket.TextMessage, messageData); err != nil {
+					log.Printf("⚠️  Failed to send to session %s: %v", sessionID, err)
+				} else {
+					sentCount++
+				}
+			}
+		}
+		exchConn.mu.RUnlock()
+
+		log.Printf("📤 Sent message to user %d via connection %s (%d tabs)", userID, connKey, len(exchConn.UserTabs))
+	}
+
+	if sentCount == 0 {
+		log.Printf("⚠️  Message not delivered to user %d (no active connections)", userID)
+	}
+}
+
+// WebSocketMessage represents a message sent via WebSocket
+type WebSocketMessage struct {
+	Type string                 `json:"type"`
+	Data map[string]interface{} `json:"data"`
+}
+
 // keepAliveListenKey keeps the listen key alive
 func (h *WebSocketHub) keepAliveListenKey(exchConn *ExchangeConnection) {
 	ticker := time.NewTicker(30 * time.Minute)

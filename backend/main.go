@@ -68,6 +68,12 @@ func main() {
 	go wsHub.Run() // Run hub in background
 	log.Println("WebSocket Hub initialized")
 
+	// Initialize Order Monitor Service (background worker)
+	orderMonitor := services.NewOrderMonitorService(db, wsHub)
+	svcs.OrderMonitor = orderMonitor
+	orderMonitor.Start() // Start background monitoring
+	log.Println("✅ Order Monitor Service started (checking every 5 seconds)")
+
 	// Setup Gin router
 	router := gin.Default()
 
