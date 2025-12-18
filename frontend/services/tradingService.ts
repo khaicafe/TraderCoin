@@ -39,12 +39,22 @@ export interface OrderStatusResponse {
   remaining: number;
 }
 
-export interface AccountInfo {
-  exchange: string;
+export interface TradingAccountInfo {
   total_balance: number;
   available_balance: number;
   in_order: number;
   balances: Balance[];
+}
+
+export interface AccountInfo {
+  exchange: string;
+  spot?: TradingAccountInfo;
+  futures?: TradingAccountInfo;
+  // Legacy fields (for backward compatibility)
+  total_balance?: number;
+  available_balance?: number;
+  in_order?: number;
+  balances?: Balance[];
 }
 
 export interface Balance {

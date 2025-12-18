@@ -318,10 +318,10 @@ export default function TradingPage() {
               </div>
             )}
 
-            {/* Account Info Card */}
+            {/* Account Info Cards - Split Spot and Futures */}
             {selectedConfig && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="font-semibold text-blue-900 mb-3 flex items-center justify-between">
+              <div className="mt-4 space-y-3">
+                <h3 className="font-semibold text-gray-900 flex items-center justify-between">
                   <span>💰 Thông tin tài khoản trên sàn</span>
                   {loadingAccount && (
                     <span className="text-xs text-blue-600">Đang tải...</span>
@@ -329,65 +329,161 @@ export default function TradingPage() {
                 </h3>
 
                 {loadingAccount ? (
-                  <div className="flex justify-center py-4">
+                  <div className="flex justify-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                   </div>
                 ) : accountInfo ? (
-                  <div className="space-y-3">
-                    {/* Summary */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Tổng tài sản</p>
-                        <p className="text-lg font-bold text-gray-900">
-                          ${accountInfo.total_balance.toFixed(2)}
-                        </p>
-                      </div>
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Khả dụng</p>
-                        <p className="text-lg font-bold text-green-600">
-                          ${accountInfo.available_balance.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Spot Account Card */}
+                    {accountInfo.spot && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                            <span>📊</span>
+                            <span>SPOT Trading</span>
+                          </h4>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                            No Leverage
+                          </span>
+                        </div>
 
-                    {/* Balances */}
-                    {accountInfo.balances &&
-                      accountInfo.balances.length > 0 && (
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500 mb-2">
-                            Tài sản chi tiết:
-                          </p>
-                          <div className="space-y-2 max-h-40 overflow-y-auto">
-                            {accountInfo.balances
-                              .filter((b) => b.total > 0.00001)
-                              .sort((a, b) => b.total - a.total)
-                              .map((balance, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex justify-between text-xs">
-                                  <span className="font-medium text-gray-700">
-                                    {balance.asset}
-                                  </span>
-                                  <div className="text-right">
-                                    <span className="text-gray-900 font-semibold">
-                                      {balance.total.toFixed(8)}
-                                    </span>
-                                    {balance.locked > 0 && (
-                                      <span className="text-orange-600 ml-2">
-                                        (🔒 {balance.locked.toFixed(8)})
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                        {/* Spot Summary */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500">
+                              Tổng tài sản
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              ${accountInfo.spot.total_balance.toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500">Khả dụng</p>
+                            <p className="text-lg font-bold text-green-600">
+                              ${accountInfo.spot.available_balance.toFixed(2)}
+                            </p>
                           </div>
                         </div>
-                      )}
+
+                        {/* Spot Balances */}
+                        {accountInfo.spot.balances &&
+                          accountInfo.spot.balances.length > 0 && (
+                            <div className="bg-white p-3 rounded-lg">
+                              <p className="text-xs text-gray-500 mb-2">
+                                Tài sản chi tiết:
+                              </p>
+                              <div className="space-y-2 max-h-32 overflow-y-auto">
+                                {accountInfo.spot.balances
+                                  .filter((b) => b.total > 0.00001)
+                                  .sort((a, b) => b.total - a.total)
+                                  .map((balance, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between text-xs">
+                                      <span className="font-medium text-blue-700">
+                                        {balance.asset}
+                                      </span>
+                                      <div className="text-right">
+                                        <span className="text-gray-900 font-semibold">
+                                          {balance.total.toFixed(8)}
+                                        </span>
+                                        {balance.locked > 0 && (
+                                          <span className="text-orange-600 ml-2">
+                                            (🔒 {balance.locked.toFixed(8)})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    )}
+
+                    {/* Futures Account Card */}
+                    {accountInfo.futures && (
+                      <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                            <span>🚀</span>
+                            <span>FUTURES Trading</span>
+                          </h4>
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                            Up to 125x
+                          </span>
+                        </div>
+
+                        {/* Futures Summary */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500">
+                              Tổng tài sản
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              ${accountInfo.futures.total_balance.toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500">Khả dụng</p>
+                            <p className="text-lg font-bold text-green-600">
+                              $
+                              {accountInfo.futures.available_balance.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Futures Balances */}
+                        {accountInfo.futures.balances &&
+                          accountInfo.futures.balances.length > 0 && (
+                            <div className="bg-white p-3 rounded-lg">
+                              <p className="text-xs text-gray-500 mb-2">
+                                Tài sản chi tiết:
+                              </p>
+                              <div className="space-y-2 max-h-32 overflow-y-auto">
+                                {accountInfo.futures.balances
+                                  .filter((b) => b.total > 0.00001)
+                                  .sort((a, b) => b.total - a.total)
+                                  .map((balance, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between text-xs">
+                                      <span className="font-medium text-purple-700">
+                                        {balance.asset}
+                                      </span>
+                                      <div className="text-right">
+                                        <span className="text-gray-900 font-semibold">
+                                          {balance.total.toFixed(8)}
+                                        </span>
+                                        {balance.locked > 0 && (
+                                          <span className="text-orange-600 ml-2">
+                                            (🔒 {balance.locked.toFixed(8)})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    )}
+
+                    {/* No Account Data */}
+                    {!accountInfo.spot && !accountInfo.futures && (
+                      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                        <p className="text-sm text-gray-500 italic">
+                          Không có dữ liệu tài khoản
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">
-                    Không thể tải thông tin tài khoản
-                  </p>
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <p className="text-sm text-gray-500 italic">
+                      Không thể tải thông tin tài khoản
+                    </p>
+                  </div>
                 )}
               </div>
             )}
