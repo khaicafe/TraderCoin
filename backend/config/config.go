@@ -136,10 +136,10 @@ func Load() *Config {
 				FuturesWSURL:  "wss://fstream.binance.com/ws",
 
 				// Testnet - Using correct stream URLs from Binance docs
-				// SpotAPIURL:    "https://testnet.binance.vision",
-				// FuturesAPIURL: "https://testnet.binancefuture.com",
-				// SpotWSURL:     "wss://stream.testnet.binance.vision/ws", // For market data streams
-				// FuturesWSURL:  "wss://stream.binancefuture.com/ws",
+				TestnetSpotAPIURL:    "https://testnet.binance.vision",
+				TestnetFuturesAPIURL: "https://testnet.binancefuture.com",
+				TestnetSpotWSURL:     "wss://stream.testnet.binance.vision/ws", // For market data streams
+				TestnetFuturesWSURL:  "wss://stream.binancefuture.com/ws",
 			},
 			OKX: OKXConfig{
 				APIURL: "https://www.okx.com",

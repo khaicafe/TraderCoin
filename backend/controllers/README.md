@@ -438,3 +438,51 @@ router.GET("/binance/futures/symbols", controllers.GetBinanceFuturesSymbols(serv
 
 **Updated:** December 16, 2025  
 **Status:** ✅ Production Ready
+
+// 🔄 Update order status from exchange before returning
+for i := range orders {
+order := &orders[i]
+
+    		// Only check orders that are not in final state (new, pending, partially_filled)
+    		statusLower := strings.ToLower(order.Status)
+    		if statusLower == "new" || statusLower == "pending" || statusLower == "partially_filled" {
+    			// Get bot config to retrieve API credentials
+    			if order.BotConfigID > 0 {
+    				var config models.TradingConfig
+    				if err := services.DB.Where("id = ?", order.BotConfigID).First(&config).Error; err == nil {
+    					// Decrypt API credentials
+    					apiKey, apiSecret, err := GetDecryptedAPICredentials(&config)
+    					if err == nil && order.OrderID != "" {
+    						// Check order status from exchange
+    						tradingService := tradingservice.NewTradingService(apiKey, apiSecret, order.Exchange)
+    						statusResult := tradingService.CheckOrderStatus(&config, order.OrderID, order.Symbol)
+
+    						if statusResult.Success {
+    							// Update order in database if status changed
+    							if statusResult.Status != order.Status {
+    								log.Printf("🔄 Updating order %d status: %s -> %s", order.ID, order.Status, statusResult.Status)
+    								order.Status = statusResult.Status
+
+    								// Update filled price if available
+    								if statusResult.AvgPrice > 0 {
+    									order.FilledPrice = statusResult.AvgPrice
+    								}
+
+    								// Update filled quantity
+    								order.FilledQuantity = statusResult.Filled
+
+    								// Save to database
+    								if err := services.DB.Save(order).Error; err != nil {
+    									log.Printf("⚠️  Failed to update order %d: %v", order.ID, err)
+    								} else {
+    									log.Printf("✅ Order %d updated successfully", order.ID)
+    								}
+    							}
+    						} else {
+    							log.Printf("⚠️  Failed to check order %d status: %s", order.ID, statusResult.Error)
+    						}
+    					}
+    				}
+    			}
+    		}
+    	}

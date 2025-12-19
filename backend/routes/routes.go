@@ -149,5 +149,29 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			admin.GET("/transactions", controllers.GetAllTransactions(services))
 			admin.GET("/statistics", controllers.GetStatistics(services))
 		}
+
+		// ============ TRADING SIGNALS ROUTES ============
+		// Prefix: /api/v1/signals
+		signals := v1.Group("/signals")
+		{
+			// Public webhook endpoint (no auth) for TradingView
+			signals.POST("/webhook/tradingview", controllers.TradingViewWebhook(services, wsHub))
+			// Prefixed webhook to identify user by unique prefix
+			signals.POST("/webhook/:prefix", controllers.TradingViewWebhook(services, wsHub))
+
+			// Authenticated endpoints
+			signalsAuth := signals.Group("")
+			signalsAuth.Use(middleware.AuthMiddleware())
+			{
+				signalsAuth.GET("", controllers.ListSignals(services))                   // List all signals
+				signalsAuth.GET("/:id", controllers.GetSignal(services))                 // Get single signal
+				signalsAuth.POST("/:id/execute", controllers.ExecuteSignal(services))    // Execute signal with bot config
+				signalsAuth.PUT("/:id/status", controllers.UpdateSignalStatus(services)) // Update signal status
+				signalsAuth.DELETE("/:id", controllers.DeleteSignal(services))           // Delete signal
+				// Webhook prefix management
+				signalsAuth.GET("/webhook/prefix", controllers.GetWebhookPrefix(services))     // Get latest active prefix
+				signalsAuth.POST("/webhook/prefix", controllers.CreateWebhookPrefix(services)) // Create new prefix
+			}
+		}
 	}
 }

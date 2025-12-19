@@ -815,7 +815,12 @@ func ConnectWebSocket(services *services.Services, hub *services.WebSocketHub) g
 			return
 		}
 
-		// Register each exchange key with the hub
+		// Always register a GLOBAL tab so broadcasts work even if exchange connections fail
+		if hub != nil {
+			hub.AddGlobalUserTab(userID.(uint), sessionID, conn)
+		}
+
+		// Register each exchange key with the hub (for order_update etc.)
 		for _, key := range exchangeKeys {
 			// Create or get listen key
 			listenKey := key.ListenKey
@@ -870,6 +875,11 @@ func ConnectWebSocket(services *services.Services, hub *services.WebSocketHub) g
 		// Handle client disconnection
 		go func() {
 			defer func() {
+				// Remove GLOBAL tab on disconnect
+				if hub != nil {
+					hub.RemoveGlobalUserTab(userID.(uint), sessionID)
+				}
+				// Unregister exchange-specific connections
 				for _, key := range exchangeKeys {
 					unregReq := &UnregisterRequest{
 						UserID:        userID.(uint),

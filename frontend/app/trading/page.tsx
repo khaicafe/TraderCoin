@@ -143,8 +143,10 @@ export default function TradingPage() {
         return;
       }
 
-      const result = await placeOrder(orderData);
+      console.log('Placing order with data:', orderData);
+      // return;
 
+      const result = await placeOrder(orderData);
       setSuccess(
         `Đặt lệnh ${side.toUpperCase()} thành công!\n` +
           `Order ID: ${result.order_id}\n` +
@@ -632,14 +634,14 @@ export default function TradingPage() {
                 onClick={() => handlePlaceOrder('buy')}
                 disabled={!selectedConfig || placing}
                 className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors">
-                {placing ? 'Đang xử lý...' : 'Đặt lệnh BUY'}
+                {placing ? 'Đang xử lý...' : 'Đặt lệnh BUY/LONG'}
               </button>
               <button
                 type="button"
                 onClick={() => handlePlaceOrder('sell')}
                 disabled={!selectedConfig || placing}
                 className="w-full bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors">
-                {placing ? 'Đang xử lý...' : 'Đặt lệnh SELL'}
+                {placing ? 'Đang xử lý...' : 'Đặt lệnh SELL/SHORT'}
               </button>
             </div>
           </form>

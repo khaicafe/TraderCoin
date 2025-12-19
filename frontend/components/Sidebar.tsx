@@ -12,6 +12,7 @@ import {
   ArrowRightOnRectangleIcon,
   KeyIcon,
   CpuChipIcon,
+  BellAlertIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -19,6 +20,7 @@ const navigation = [
   // {name: 'Exchange Keys', href: '/exchange-keys', icon: KeyIcon},
   {name: 'Bot Configs', href: '/bot-configs', icon: CogIcon},
   {name: 'Đặt Lệnh', href: '/trading', icon: ChartBarIcon},
+  {name: 'Signals', href: '/signals', icon: BellAlertIcon},
   {name: 'Orders', href: '/orders', icon: ClipboardDocumentListIcon},
   {name: 'Monitoring', href: '/monitoring', icon: ChartBarSquareIcon},
   {name: 'Nhật Ký / Lỗi', href: '/logs', icon: DocumentTextIcon},

@@ -86,6 +86,11 @@ type WebSocketHub struct {
 	// Map: userID → list of sessionIDs
 	UserSessions map[uint]map[string]bool
 
+	// Global (exchange-agnostic) browser connections per user
+	// This ensures we can broadcast notifications to users even
+	// when they haven't configured any exchange keys yet.
+	GlobalUserTabs map[uint]map[string]*websocket.Conn
+
 	// Channels
 	Register   chan *RegisterRequest
 	Unregister chan *UnregisterRequest
@@ -103,13 +108,14 @@ type WebSocketHub struct {
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub(db *gorm.DB, cfg *config.Config) *WebSocketHub {
 	return &WebSocketHub{
-		ExchangeConns: make(map[string]*ExchangeConnection),
-		UserSessions:  make(map[uint]map[string]bool),
-		Register:      make(chan *RegisterRequest, 100),
-		Unregister:    make(chan *UnregisterRequest, 100),
-		Broadcast:     make(chan *BroadcastMessage, 1000),
-		DB:            db,
-		Config:        cfg,
+		ExchangeConns:  make(map[string]*ExchangeConnection),
+		UserSessions:   make(map[uint]map[string]bool),
+		GlobalUserTabs: make(map[uint]map[string]*websocket.Conn),
+		Register:       make(chan *RegisterRequest, 100),
+		Unregister:     make(chan *UnregisterRequest, 100),
+		Broadcast:      make(chan *BroadcastMessage, 1000),
+		DB:             db,
+		Config:         cfg,
 	}
 }
 
@@ -544,6 +550,113 @@ func (hub *WebSocketHub) BroadcastToUser(userID uint, message WebSocketMessage) 
 	if sentCount == 0 {
 		log.Printf("⚠️  Message not delivered to user %d (no active connections)", userID)
 	}
+}
+
+// BroadcastToAll sends a message to ALL connected users (used for global notifications)
+func (hub *WebSocketHub) BroadcastToAll(data map[string]interface{}) {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+
+	message := WebSocketMessage{
+		Type: data["type"].(string),
+		Data: data["data"].(map[string]interface{}),
+	}
+
+	messageData, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("❌ Failed to marshal WebSocket broadcast message: %v", err)
+		return
+	}
+
+	sentCount := 0
+	userCount := 0
+
+	// First, broadcast to global (exchange-agnostic) tabs
+	for userID, sessions := range hub.GlobalUserTabs {
+		tabCount := 0
+		for sessionID, userConn := range sessions {
+			if userConn != nil {
+				if err := userConn.WriteMessage(websocket.TextMessage, messageData); err != nil {
+					log.Printf("⚠️  Failed to broadcast to global session %s (user %d): %v", sessionID, userID, err)
+				} else {
+					sentCount++
+					tabCount++
+				}
+			}
+		}
+		if tabCount > 0 {
+			userCount++
+			log.Printf("📡 Broadcasted message via GLOBAL connection for user %d (%d tabs)", userID, tabCount)
+		}
+	}
+
+	// Send to all exchange connections for all users
+	for connKey, exchConn := range hub.ExchangeConns {
+		exchConn.mu.RLock()
+		tabCount := 0
+		for sessionID, userConn := range exchConn.UserTabs {
+			if userConn != nil {
+				if err := userConn.WriteMessage(websocket.TextMessage, messageData); err != nil {
+					log.Printf("⚠️  Failed to broadcast to session %s: %v", sessionID, err)
+				} else {
+					sentCount++
+					tabCount++
+				}
+			}
+		}
+		exchConn.mu.RUnlock()
+
+		if tabCount > 0 {
+			userCount++
+			log.Printf("📡 Broadcasted message via connection %s (%d tabs)", connKey, tabCount)
+		}
+	}
+
+	if sentCount > 0 {
+		log.Printf("✅ Broadcast successful: %d messages sent to %d users", sentCount, userCount)
+	} else {
+		log.Printf("📭 No active WebSocket connections to broadcast to")
+	}
+}
+
+// AddGlobalUserTab registers a browser-only WebSocket connection not tied to any exchange
+func (hub *WebSocketHub) AddGlobalUserTab(userID uint, sessionID string, conn *websocket.Conn) {
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+
+	if hub.GlobalUserTabs[userID] == nil {
+		hub.GlobalUserTabs[userID] = make(map[string]*websocket.Conn)
+	}
+	hub.GlobalUserTabs[userID][sessionID] = conn
+
+	if hub.UserSessions[userID] == nil {
+		hub.UserSessions[userID] = make(map[string]bool)
+	}
+	hub.UserSessions[userID][sessionID] = true
+
+	log.Printf("Registered GLOBAL WebSocket tab for user %d (session %s)", userID, sessionID)
+}
+
+// RemoveGlobalUserTab unregisters a browser-only WebSocket connection
+func (hub *WebSocketHub) RemoveGlobalUserTab(userID uint, sessionID string) {
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+
+	if tabs, ok := hub.GlobalUserTabs[userID]; ok {
+		delete(tabs, sessionID)
+		if len(tabs) == 0 {
+			delete(hub.GlobalUserTabs, userID)
+		}
+	}
+
+	if sessions, ok := hub.UserSessions[userID]; ok {
+		delete(sessions, sessionID)
+		if len(sessions) == 0 {
+			delete(hub.UserSessions, userID)
+		}
+	}
+
+	log.Printf("Unregistered GLOBAL WebSocket tab for user %d (session %s)", userID, sessionID)
 }
 
 // WebSocketMessage represents a message sent via WebSocket
