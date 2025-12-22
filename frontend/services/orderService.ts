@@ -23,6 +23,20 @@ export interface Order {
   bot_config_name?: string;
   created_at: string;
   updated_at: string;
+
+  // Position data (for futures orders)
+  position?: {
+    position_amt?: string;
+    entry_price?: string;
+    mark_price?: string;
+    liquidation_price?: string;
+    unrealized_profit?: string;
+    pnl_percent?: string;
+    leverage?: string;
+    margin_type?: string;
+    isolated_margin?: string;
+    position_side?: string;
+  };
 }
 
 export interface OrderHistoryParams {

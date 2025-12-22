@@ -54,11 +54,17 @@ func (oms *OrderMonitorService) Stop() {
 
 // checkPendingOrders checks all pending orders from exchange
 func (oms *OrderMonitorService) checkPendingOrders() {
-	// Query all orders with pending status (new, pending, partially_filled)
+	// Query orders to monitor:
+	// - Spot: new, pending, partially_filled
+	// - Futures: all except 'closed' (including 'filled' because position is still open)
 	var orders []models.Order
-	err := oms.DB.Where("LOWER(status) IN ?", []string{"new", "pending", "partially_filled"}).
-		Preload("User"). // Load user info
-		Find(&orders).Error
+	err := oms.DB.Where(
+		"(LOWER(trading_mode) IN (?, ?) AND LOWER(status) != ?) OR "+
+			"((trading_mode IS NULL OR LOWER(trading_mode) = ?) AND LOWER(status) IN (?, ?, ?))",
+		"futures", "future", "closed", // Futures: monitor all except closed
+		"spot", "new", "pending", "partially_filled", // Spot: only monitor pending statuses
+	).Preload("User"). // Load user info
+				Find(&orders).Error
 
 	if err != nil {
 		log.Printf("❌ Failed to query pending orders: %v", err)
@@ -66,7 +72,7 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 	}
 
 	if len(orders) == 0 {
-		// log.Println("📊 No pending orders to check")
+		log.Println("📊 No pending orders to check")
 		return
 	}
 
@@ -131,7 +137,7 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 
 		// Check order status from exchange
 		tradingService := NewTradingService(apiKey, apiSecret, order.Exchange)
-		statusResult := tradingService.CheckOrderStatus(&config, order.OrderID, order.Symbol)
+		statusResult := tradingService.CheckOrderStatus(&config, order.OrderID, order.Symbol, order.AlgoIDStopLoss)
 
 		if !statusResult.Success {
 			log.Printf("⚠️  Order %d: Failed to check status - %s", order.ID, statusResult.Error)
@@ -145,12 +151,56 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 		newStatusLower := strings.ToLower(newStatus)
 		oldStatusLower := strings.ToLower(oldStatus)
 
+		// Variable to store position info for notification
+		var positionInfo *FuturesPositionInfo
+
+		// For Futures: Check if order/position is still running
+		if strings.ToLower(order.TradingMode) == "futures" || strings.ToLower(order.TradingMode) == "future" {
+			if statusResult.IsRunning {
+				// Order hoặc Algo Order vẫn đang chạy - Get position info
+				log.Printf("🔍 Order %d: Calling GetFuturesPosition for symbol=%s", order.ID, order.Symbol)
+				position, err := tradingService.GetFuturesPosition(order.Symbol)
+				if err != nil {
+					log.Printf("⚠️  Order %d: Failed to get position info: %v", order.ID, err)
+				} else if position != nil {
+					positionInfo = position // Save for WebSocket notification
+					log.Printf("🔍 Order %d (Futures): Status=%s, IsRunning=true, Type=%s, AlgoStatus=%s",
+						order.ID, statusResult.Status, statusResult.RunningType, statusResult.AlgoStatus)
+					log.Printf("   📊 Position Info:")
+					log.Printf("      Symbol: %s | Size: %.3f %s",
+						position.Symbol, position.PositionAmt, position.PositionSide)
+					log.Printf("      Entry Price: %.2f | Mark Price: %.2f | Liq.Price: %.2f",
+						position.EntryPrice, position.MarkPrice, position.LiquidationPrice)
+					log.Printf("      PnL: %.2f USDT (%.2f%%) | Margin: %.2f USDT | Leverage: %dx",
+						position.UnrealizedProfit, position.PnlPercent, position.IsolatedMargin, position.Leverage)
+
+					// Send WebSocket update with position info (even if status not changed)
+					oms.notifyOrderUpdate(order.UserID, order.ID, &order, positionInfo)
+				} else {
+					log.Printf("⚠️  Order %d: GetFuturesPosition returned nil (no position or positionAmt=0)", order.ID)
+					log.Printf("🔍 Order %d (Futures): Status=%s, IsRunning=true, Type=%s, AlgoStatus=%s (No position)",
+						order.ID, statusResult.Status, statusResult.RunningType, statusResult.AlgoStatus)
+				}
+				// Không update gì, order vẫn active
+				continue
+			} else {
+				// Order và Algo Order đã không còn chạy → Close position
+				log.Printf("🔍 Order %d (Futures): Status=%s, IsRunning=false → Setting to CLOSED",
+					order.ID, statusResult.Status)
+				newStatus = "closed"
+				newStatusLower = "closed"
+			}
+		} else {
+			// For Spot: Just log status
+			log.Printf("🔍 Order %d (Spot): Status=%s", order.ID, statusResult.Status)
+		}
+
 		if newStatusLower != oldStatusLower {
 			// Update order in database
 			order.Status = newStatus
 
 			// Update filled price and quantity for filled orders
-			if newStatusLower == "filled" {
+			if newStatusLower == "filled" && order.TradingMode == "spot" {
 				if statusResult.AvgPrice > 0 {
 					order.FilledPrice = statusResult.AvgPrice
 				}
@@ -162,37 +212,78 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 				log.Printf("✅ Order %d: %s → %s", order.ID, oldStatus, newStatus)
 			}
 
-			// Save to database
-			if err := oms.DB.Save(&order).Error; err != nil {
-				log.Printf("❌ Order %d: Failed to update in DB: %v", order.ID, err)
+			// Validate order ID before update
+			if order.ID == 0 {
+				log.Printf("⚠️  Order has invalid ID (0), skipping update. OrderID: %s", order.OrderID)
+				errorCount++
+				continue
+			}
+
+			// Save to database using primary key ID
+			updateData := map[string]interface{}{
+				"status":          newStatus,
+				"filled_price":    order.FilledPrice,
+				"filled_quantity": order.FilledQuantity,
+			}
+			if err := oms.DB.Model(&models.Order{}).Where("id = ?", order.ID).Updates(updateData).Error; err != nil {
+				log.Printf("❌ Order %d (OrderID: %s): Failed to update in DB: %v", order.ID, order.OrderID, err)
 				errorCount++
 				continue
 			}
 
 			updatedCount++
 
-			// Send WebSocket notification to user
-			oms.notifyOrderUpdate(order.UserID, order.ID)
+			// Send WebSocket notification to user (with position info if available)
+			oms.notifyOrderUpdate(order.UserID, order.ID, &order, positionInfo)
 		}
 	}
 
 	log.Printf("🔷 ===== ORDER MONITOR - Complete: %d updated, %d errors =====\n", updatedCount, errorCount)
 }
 
-// notifyOrderUpdate sends WebSocket notification to user
-func (oms *OrderMonitorService) notifyOrderUpdate(userID uint, orderID uint) {
+// notifyOrderUpdate sends WebSocket notification to user with position info
+func (oms *OrderMonitorService) notifyOrderUpdate(userID uint, orderID uint, order *models.Order, position *FuturesPositionInfo) {
 	if oms.WebSocketHub == nil {
 		return
 	}
 
+	// Base order data
+	data := map[string]interface{}{
+		"order_id":     orderID,
+		"timestamp":    time.Now().Unix(),
+		"symbol":       order.Symbol,
+		"side":         order.Side,
+		"status":       order.Status,
+		"trading_mode": order.TradingMode,
+	}
+
+	// Add position info if available (for futures)
+	if position != nil {
+		data["position"] = map[string]interface{}{
+			"symbol":            position.Symbol,
+			"position_amt":      position.PositionAmt,
+			"position_side":     position.PositionSide,
+			"entry_price":       position.EntryPrice,
+			"mark_price":        position.MarkPrice,
+			"liquidation_price": position.LiquidationPrice,
+			"unrealized_profit": position.UnrealizedProfit,
+			"pnl_percent":       position.PnlPercent,
+			"leverage":          position.Leverage,
+			"margin_type":       position.MarginType,
+			"isolated_margin":   position.IsolatedMargin,
+		}
+	}
+
 	message := WebSocketMessage{
 		Type: "order_update",
-		Data: map[string]interface{}{
-			"order_id":  orderID,
-			"timestamp": time.Now().Unix(),
-		},
+		Data: data,
 	}
 
 	oms.WebSocketHub.BroadcastToUser(userID, message)
-	log.Printf("📤 WebSocket notification sent to user %d for order %d", userID, orderID)
+
+	if position != nil {
+		log.Printf("📤 WebSocket notification sent to user %d for order %d (with position info)", userID, orderID)
+	} else {
+		log.Printf("📤 WebSocket notification sent to user %d for order %d", userID, orderID)
+	}
 }

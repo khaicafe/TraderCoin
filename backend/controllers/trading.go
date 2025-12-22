@@ -163,7 +163,7 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 		log.Printf("Order placed successfully on %s: OrderID=%s, Symbol=%s, Side=%s, Amount=%f",
 			config.Exchange, orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity)
 
-		// Calculate SL/TP prices
+		// Calculate SL/TP prices for response (service already handled placing SL/TP orders)
 		var stopLoss, takeProfit float64
 		filledPrice := orderResult.FilledPrice
 		if filledPrice > 0 {
@@ -182,58 +182,30 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 					takeProfit = filledPrice * (1 - config.TakeProfitPercent/100)
 				}
 			}
-
-			// Place Stop Loss and Take Profit orders on Binance
-			if config.Exchange == "binance" && (stopLoss > 0 || takeProfit > 0) {
-				// Determine opposite side for closing position
-				closeSide := "sell"
-				if request.Side == "sell" {
-					closeSide = "buy"
-				}
-
-				// Place Stop Loss order
-				if stopLoss > 0 {
-					slResult := tradingService.PlaceStopLossOrder(&config, symbol, stopLoss, orderResult.Quantity, closeSide)
-					if slResult.Success {
-						log.Printf("✅ Stop Loss order placed: OrderID=%s, StopPrice=%.8f", slResult.OrderID, stopLoss)
-					} else {
-						log.Printf("⚠️ Failed to place Stop Loss order: %s", slResult.Error)
-						// Continue anyway, main order was successful
-					}
-				}
-
-				// Place Take Profit order
-				if takeProfit > 0 {
-					tpResult := tradingService.PlaceTakeProfitOrder(&config, symbol, takeProfit, orderResult.Quantity, closeSide)
-					if tpResult.Success {
-						log.Printf("✅ Take Profit order placed: OrderID=%s, TakeProfit=%.8f", tpResult.OrderID, takeProfit)
-					} else {
-						log.Printf("⚠️ Failed to place Take Profit order: %s", tpResult.Error)
-						// Continue anyway, main order was successful
-					}
-				}
-			}
 		}
 
-		// Create order record using the actual Order model fields
+		// Create order record using Algo IDs from orderResult
+		// Service has already placed SL/TP orders and returned their IDs
 		order := models.Order{
-			UserID:          userID.(uint),
-			BotConfigID:     config.ID,
-			Exchange:        config.Exchange,
-			Symbol:          orderResult.Symbol,
-			OrderID:         orderResult.OrderID, // Exchange order ID
-			Side:            orderResult.Side,
-			Type:            orderResult.Type,
-			Quantity:        orderResult.Quantity,
-			Price:           orderResult.Price,
-			FilledPrice:     orderResult.FilledPrice,
-			Status:          orderResult.Status,
-			TradingMode:     config.TradingMode,
-			Leverage:        config.Leverage,
-			StopLossPrice:   stopLoss,
-			TakeProfitPrice: takeProfit,
-			PnL:             0,
-			PnLPercent:      0,
+			UserID:           userID.(uint),
+			BotConfigID:      config.ID,
+			Exchange:         config.Exchange,
+			Symbol:           orderResult.Symbol,
+			OrderID:          orderResult.OrderID, // Exchange order ID
+			Side:             orderResult.Side,
+			Type:             orderResult.Type,
+			Quantity:         orderResult.Quantity,
+			Price:            orderResult.Price,
+			FilledPrice:      orderResult.FilledPrice,
+			Status:           orderResult.Status,
+			TradingMode:      config.TradingMode,
+			Leverage:         config.Leverage,
+			StopLossPrice:    stopLoss,
+			TakeProfitPrice:  takeProfit,
+			AlgoIDStopLoss:   orderResult.AlgoIDStopLoss,   // Use from service
+			AlgoIDTakeProfit: orderResult.AlgoIDTakeProfit, // Use from service
+			PnL:              0,
+			PnLPercent:       0,
 		}
 
 		if err := services.DB.Create(&order).Error; err != nil {
@@ -242,7 +214,13 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		log.Printf("Order created successfully: ID=%d, Exchange OrderID=%s", order.ID, order.OrderID)
+		// Log Algo IDs if they exist (indicating SL/TP orders were placed by service)
+		if orderResult.AlgoIDStopLoss != "" || orderResult.AlgoIDTakeProfit != "" {
+			log.Printf("Order created with Algo IDs: ID=%d, OrderID=%s, AlgoIDStopLoss=%s, AlgoIDTakeProfit=%s",
+				order.ID, order.OrderID, orderResult.AlgoIDStopLoss, orderResult.AlgoIDTakeProfit)
+		} else {
+			log.Printf("Order created successfully: ID=%d, Exchange OrderID=%s", order.ID, order.OrderID)
+		}
 
 		c.JSON(http.StatusOK, PlaceOrderResponse{
 			Status:          "success",

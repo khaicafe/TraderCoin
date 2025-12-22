@@ -32,17 +32,19 @@ const (
 
 // OrderResult represents the result of placing an order
 type OrderResult struct {
-	Success      bool        `json:"success"`
-	OrderID      string      `json:"order_id"`
-	Symbol       string      `json:"symbol"`
-	Side         string      `json:"side"`
-	Type         string      `json:"type"`
-	Quantity     float64     `json:"quantity"`
-	Price        float64     `json:"price"`
-	FilledPrice  float64     `json:"filled_price"`
-	Status       string      `json:"status"`
-	Error        string      `json:"error,omitempty"`
-	ErrorDetails interface{} `json:"error_details,omitempty"`
+	Success          bool        `json:"success"`
+	OrderID          string      `json:"order_id"`
+	Symbol           string      `json:"symbol"`
+	Side             string      `json:"side"`
+	Type             string      `json:"type"`
+	Quantity         float64     `json:"quantity"`
+	Price            float64     `json:"price"`
+	FilledPrice      float64     `json:"filled_price"`
+	Status           string      `json:"status"`
+	AlgoIDStopLoss   string      `json:"algo_id_stop_loss,omitempty"`
+	AlgoIDTakeProfit string      `json:"algo_id_take_profit,omitempty"`
+	Error            string      `json:"error,omitempty"`
+	ErrorDetails     interface{} `json:"error_details,omitempty"`
 }
 
 // NewTradingService creates a new trading service instance
@@ -381,8 +383,9 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	fmt.Printf("   Take Profit %%: %.2f\n\n", config.TakeProfitPercent)
 
 	//////////// Đặt TP/SL tự động nếu có cấu hình trong bot (chỉ cho Futures) //////////
+	var algoIDStopLoss, algoIDTakeProfit string
 	if tradingMode == "futures" {
-		ts.placeAutoTPSL(config, symbol, binanceResp, binanceSide, binanceType, filledPrice, orderPrice, quantity)
+		algoIDStopLoss, algoIDTakeProfit = ts.placeAutoTPSL(config, symbol, binanceResp, binanceSide, binanceType, filledPrice, orderPrice, quantity)
 	}
 
 	//////////// Đặt trailing stop nếu có cấu hình trong bot (chỉ cho Futures) //////////
@@ -395,19 +398,21 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	}
 
 	return OrderResult{
-		Success:     true,
-		OrderID:     strconv.FormatInt(binanceResp.OrderID, 10),
-		Symbol:      binanceResp.Symbol,
-		Side:        binanceResp.Side,
-		Type:        binanceResp.Type,
-		Quantity:    quantity,
-		Price:       orderPrice,
-		FilledPrice: filledPrice,
-		Status:      strings.ToLower(binanceResp.Status), // Convert to lowercase: FILLED -> filled
+		Success:          true,
+		OrderID:          strconv.FormatInt(binanceResp.OrderID, 10),
+		Symbol:           binanceResp.Symbol,
+		Side:             binanceResp.Side,
+		Type:             binanceResp.Type,
+		Quantity:         quantity,
+		Price:            orderPrice,
+		FilledPrice:      filledPrice,
+		Status:           strings.ToLower(binanceResp.Status), // Convert to lowercase: FILLED -> filled
+		AlgoIDStopLoss:   algoIDStopLoss,
+		AlgoIDTakeProfit: algoIDTakeProfit,
 	}
 }
 
-// placeAutoTPSL tự động đặt TP/SL cho Futures orders
+// placeAutoTPSL tự động đặt TP/SL cho Futures orders và return Algo IDs
 func (ts *TradingService) placeAutoTPSL(
 	config *models.TradingConfig,
 	symbol string,
@@ -432,7 +437,7 @@ func (ts *TradingService) placeAutoTPSL(
 	filledPrice float64,
 	orderPrice float64,
 	quantity float64,
-) {
+) (algoIDStopLoss string, algoIDTakeProfit string) {
 	statusFilled := "❌"
 	shouldPlaceTPSL := false
 
@@ -449,7 +454,7 @@ func (ts *TradingService) placeAutoTPSL(
 		time.Sleep(2 * time.Second)
 
 		// Check order status again
-		statusResult := ts.CheckOrderStatus(config, strconv.FormatInt(binanceResp.OrderID, 10), symbol)
+		statusResult := ts.CheckOrderStatus(config, strconv.FormatInt(binanceResp.OrderID, 10), symbol, "")
 		if statusResult.Success && statusResult.Status == "filled" {
 			fmt.Printf("✅ Order now FILLED after check\n")
 			// Update filled price from status check
@@ -477,7 +482,7 @@ func (ts *TradingService) placeAutoTPSL(
 
 	if !shouldPlaceTPSL {
 		fmt.Printf("⚠️  Skipping TP/SL placement (conditions not met)\n\n")
-		return
+		return "", ""
 	}
 
 	// Sử dụng filled price hoặc order price để tính TP/SL
@@ -494,7 +499,7 @@ func (ts *TradingService) placeAutoTPSL(
 			fmt.Printf("⚠️  Using current price as entry: %.8f\n", entryPrice)
 		} else {
 			fmt.Printf("❌ Cannot determine entry price, skipping TP/SL\n\n")
-			return
+			return "", ""
 		}
 	}
 
@@ -524,6 +529,9 @@ func (ts *TradingService) placeAutoTPSL(
 		slResult := ts.PlaceStopLossOrder(config, symbol, stopLossPrice, quantity, closeSide)
 		if !slResult.Success {
 			fmt.Printf("⚠️  Failed to place Stop Loss: %s\n\n", slResult.Error)
+		} else {
+			algoIDStopLoss = slResult.OrderID
+			fmt.Printf("✅ algoID Stop Loss: %s\n\n", slResult.OrderID)
 		}
 	}
 
@@ -562,6 +570,8 @@ func (ts *TradingService) placeAutoTPSL(
 	// 		fmt.Printf("⚠️  Failed to place Take Profit: %s\n\n", tpResult.Error)
 	// 	}
 	// }
+
+	return algoIDStopLoss, algoIDTakeProfit
 }
 
 // placeBittrexOrder places an order on Bittrex
@@ -716,122 +726,6 @@ func (ts *TradingService) PlaceStopLossOrder(config *models.TradingConfig, symbo
 	if tradingMode == "futures" {
 		return ts.PlaceAlgoStopLoss(config, symbol, stopPrice, strings.ToUpper(side), "LONG")
 	}
-
-	// adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
-
-	// var baseURL string
-	// var endpoint string
-	// // Spot doesn't support STOP_MARKET, use STOP_LOSS_LIMIT
-	// baseURL = adapter.SpotAPIURL
-	// endpoint = "/api/v3/order"
-
-	// // Prepare parameters
-	// params := url.Values{}
-	// params.Set("symbol", symbol)
-	// params.Set("side", strings.ToUpper(side))
-
-	// // Spot: Use STOP_LOSS_LIMIT
-	// params.Set("type", "STOP_LOSS_LIMIT")
-	// params.Set("quantity", fmt.Sprintf("%.8f", quantity))
-	// params.Set("stopPrice", fmt.Sprintf("%.8f", stopPrice))
-	// params.Set("price", fmt.Sprintf("%.8f", stopPrice*0.99)) // Slightly lower to ensure execution
-	// params.Set("timeInForce", "GTC")
-
-	// params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
-
-	// // Create signature
-	// queryString := params.Encode()
-	// h := hmac.New(sha256.New, []byte(ts.APISecret))
-	// h.Write([]byte(queryString))
-	// signature := hex.EncodeToString(h.Sum(nil))
-	// params.Set("signature", signature)
-
-	// // Build full URL
-	// fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
-
-	// // Create request
-	// req, err := http.NewRequest("POST", fullURL, nil)
-	// if err != nil {
-	// 	return OrderResult{
-	// 		Success:      false,
-	// 		Error:        "Failed to create stop loss order request",
-	// 		ErrorDetails: err.Error(),
-	// 	}
-	// }
-
-	// req.Header.Set("X-MBX-APIKEY", ts.APIKey)
-
-	// // Make request
-	// client := &http.Client{Timeout: 30 * time.Second}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	return OrderResult{
-	// 		Success:      false,
-	// 		Error:        "Failed to place stop loss order",
-	// 		ErrorDetails: err.Error(),
-	// 	}
-	// }
-	// defer resp.Body.Close()
-
-	// body, err := io.ReadAll(resp.Body)
-	// if err != nil {
-	// 	return OrderResult{
-	// 		Success:      false,
-	// 		Error:        "Failed to read stop loss response",
-	// 		ErrorDetails: err.Error(),
-	// 	}
-	// }
-
-	// // Log raw response from exchange
-	// fmt.Printf("\n🔵 STOP LOSS ORDER - Exchange Response:\n")
-	// fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	// fmt.Printf("Response Body: %s\n\n", string(body))
-
-	// if resp.StatusCode != http.StatusOK {
-	// 	var errorResp map[string]interface{}
-	// 	json.Unmarshal(body, &errorResp)
-
-	// 	errorMsg := fmt.Sprintf("Stop loss order failed (status %d)", resp.StatusCode)
-	// 	if msg, ok := errorResp["msg"].(string); ok {
-	// 		errorMsg = fmt.Sprintf("%s: %s", errorMsg, msg)
-	// 	}
-
-	// 	fmt.Printf("❌ STOP LOSS ERROR: %s\n", errorMsg)
-	// 	fmt.Printf("Error Details: %+v\n\n", errorResp)
-
-	// 	return OrderResult{
-	// 		Success:      false,
-	// 		Error:        errorMsg,
-	// 		ErrorDetails: errorResp,
-	// 	}
-	// }
-
-	// var binanceResp struct {
-	// 	OrderID   int64  `json:"orderId"`
-	// 	Symbol    string `json:"symbol"`
-	// 	Status    string `json:"status"`
-	// 	Type      string `json:"type"`
-	// 	Side      string `json:"side"`
-	// 	StopPrice string `json:"stopPrice"`
-	// }
-
-	// json.Unmarshal(body, &binanceResp)
-
-	// // Log success details
-	// fmt.Printf("✅ STOP LOSS ORDER PLACED:\n")
-	// fmt.Printf("   OrderID: %d\n", binanceResp.OrderID)
-	// fmt.Printf("   Symbol: %s\n", binanceResp.Symbol)
-	// fmt.Printf("   Type: %s\n", binanceResp.Type)
-	// fmt.Printf("   Side: %s\n", binanceResp.Side)
-	// fmt.Printf("   Stop Price: %s\n", binanceResp.StopPrice)
-	// fmt.Printf("   Status: %s\n\n", binanceResp.Status)
-
-	// return OrderResult{
-	// 	Success: true,
-	// 	OrderID: strconv.FormatInt(binanceResp.OrderID, 10),
-	// 	Symbol:  binanceResp.Symbol,
-	// 	Status:  strings.ToLower(binanceResp.Status), // Convert to lowercase
-	// }
 
 	return OrderResult{
 		Success: false,
@@ -1092,22 +986,11 @@ func (ts *TradingService) PlaceTrailingStopOrder(
 	}
 }
 
-// OrderStatusResult represents the result of checking order status
-type OrderStatusResult struct {
-	Success   bool    `json:"success"`
-	OrderID   string  `json:"order_id"`
-	Status    string  `json:"status"`
-	Filled    float64 `json:"filled"`
-	Remaining float64 `json:"remaining"`
-	AvgPrice  float64 `json:"avg_price"`
-	Error     string  `json:"error,omitempty"`
-}
-
 // CheckOrderStatus checks order status on exchange
-func (ts *TradingService) CheckOrderStatus(config *models.TradingConfig, exchangeOrderID string, symbol string) OrderStatusResult {
+func (ts *TradingService) CheckOrderStatus(config *models.TradingConfig, exchangeOrderID string, symbol string, algoIDStopLoss string) OrderStatusResult {
 	switch ts.Exchange {
 	case "binance":
-		return ts.checkBinanceOrderStatus(config, exchangeOrderID, symbol)
+		return ts.checkBinanceOrderStatus(config, exchangeOrderID, symbol, algoIDStopLoss)
 	case "bittrex":
 		return ts.checkBittrexOrderStatus(config, exchangeOrderID, symbol)
 	default:
@@ -1118,8 +1001,44 @@ func (ts *TradingService) CheckOrderStatus(config *models.TradingConfig, exchang
 	}
 }
 
-// checkBinanceOrderStatus checks order status on Binance
-func (ts *TradingService) checkBinanceOrderStatus(config *models.TradingConfig, exchangeOrderID string, symbol string) OrderStatusResult {
+// OrderStatusResult represents the result of checking order status
+type OrderStatusResult struct {
+	Success     bool    `json:"success"`
+	Error       string  `json:"error,omitempty"`
+	OrderID     string  `json:"order_id"`
+	Symbol      string  `json:"symbol"`
+	Status      string  `json:"status"` // filled, new, canceled, ...
+	Filled      float64 `json:"filled_qty"`
+	Remaining   float64 `json:"remaining_qty"`
+	AvgPrice    float64 `json:"avg_price"`
+	IsRunning   bool    `json:"is_running"`             // true nếu lệnh hoặc Algo Order liên quan đang chạy
+	RunningType string  `json:"running_type,omitempty"` // "NORMAL", "ALGO", hoặc ""
+	AlgoStatus  string  `json:"algo_status,omitempty"`
+	AlgoType    string  `json:"algo_type,omitempty"`
+	OrigQty     float64 `json:"orig_qty,omitempty"`
+	Side        string  `json:"side,omitempty"`
+}
+
+// RunningOrderStatus represents the status of a running order (normal or algo)
+type RunningOrderStatus struct {
+	IsRunning   bool    `json:"is_running"`       // true nếu lệnh đang mở/active
+	Type        string  `json:"type"`             // "NORMAL" hoặc "ALGO" hoặc "UNKNOWN"
+	Status      string  `json:"status,omitempty"` // NEW, PARTIALLY_FILLED, WORKING...
+	Symbol      string  `json:"symbol,omitempty"`
+	Side        string  `json:"side,omitempty"`
+	OrigQty     float64 `json:"orig_qty,omitempty"`
+	ExecutedQty float64 `json:"executed_qty,omitempty"`
+	AvgPrice    float64 `json:"avg_price,omitempty"`
+	AlgoType    string  `json:"algo_type,omitempty"` // TRAILING_STOP_MARKET, STOP_MARKET...
+}
+
+func (ts *TradingService) checkBinanceOrderStatus(
+	config *models.TradingConfig,
+	exchangeOrderID string,
+	symbol string,
+	algoIDStopLoss string, // Thêm tham số để check Algo Order (nếu có)
+) OrderStatusResult {
+
 	isTestnet := false
 	tradingMode := config.TradingMode
 	if tradingMode == "" {
@@ -1128,21 +1047,253 @@ func (ts *TradingService) checkBinanceOrderStatus(config *models.TradingConfig, 
 
 	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
 
-	var baseURL string
-	var endpoint string
+	var baseURL, endpoint string
 	if tradingMode == "futures" {
 		baseURL = adapter.FuturesAPIURL
 		endpoint = "/fapi/v1/order"
+		// fmt.Printf("\n🔍 CHECK FUTURES ORDER STATUS - Request:\n")
+		// fmt.Printf("   Symbol: %s\n", symbol)
+		// fmt.Printf("   OrderID: %s\n", exchangeOrderID)
 	} else {
 		baseURL = adapter.SpotAPIURL
 		endpoint = "/api/v3/order"
 	}
 
-	// Prepare parameters
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("orderId", exchangeOrderID)
-	params.Set("timestamp", strconv.FormatInt(time.Now().UnixNano()/1000000, 10))
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	signature := ts.sign(params.Encode())
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return OrderStatusResult{Success: false, Error: fmt.Sprintf("Request creation failed: %v", err)}
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return OrderStatusResult{Success: false, Error: fmt.Sprintf("Request failed: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if tradingMode == "futures" {
+		// fmt.Printf("🔍 CHECK FUTURES ORDER STATUS - Response:\n")
+		// fmt.Printf("   Status Code: %d\n", resp.StatusCode)
+		// fmt.Printf("   Response Body: %s\n\n", string(body))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		json.Unmarshal(body, &errorResp)
+		errorMsg := fmt.Sprintf("Binance API error (status %d)", resp.StatusCode)
+		if msg, ok := errorResp["msg"].(string); ok {
+			errorMsg += ": " + msg
+		}
+		return OrderStatusResult{Success: false, Error: errorMsg}
+	}
+
+	// Parse normal order response
+	var binanceResp struct {
+		OrderID     int64  `json:"orderId"`
+		Symbol      string `json:"symbol"`
+		Status      string `json:"status"`
+		OrigQty     string `json:"origQty"`
+		ExecutedQty string `json:"executedQty"`
+		AvgPrice    string `json:"avgPrice"`
+		Side        string `json:"side"`
+		Type        string `json:"type"`
+	}
+
+	if err := json.Unmarshal(body, &binanceResp); err != nil {
+		return OrderStatusResult{Success: false, Error: "Failed to parse response"}
+	}
+
+	origQty, _ := strconv.ParseFloat(binanceResp.OrigQty, 64)
+	executedQty, _ := strconv.ParseFloat(binanceResp.ExecutedQty, 64)
+	avgPrice, _ := strconv.ParseFloat(binanceResp.AvgPrice, 64)
+	remaining := origQty - executedQty
+
+	finalStatus := strings.ToLower(binanceResp.Status)
+	isNormalRunning := finalStatus == "new" || finalStatus == "partially_filled"
+
+	// Khởi tạo result cơ bản
+	result := OrderStatusResult{
+		Success:   true,
+		OrderID:   strconv.FormatInt(binanceResp.OrderID, 10),
+		Symbol:    binanceResp.Symbol,
+		Status:    finalStatus,
+		Filled:    executedQty,
+		Remaining: remaining,
+		AvgPrice:  avgPrice,
+		IsRunning: isNormalRunning,
+	}
+
+	if isNormalRunning {
+		result.RunningType = "NORMAL"
+		if tradingMode == "futures" {
+			fmt.Printf("✅ Order %s đang chạy (NORMAL): %s\n\n", exchangeOrderID, finalStatus)
+		}
+		return result
+	}
+
+	// Nếu lệnh thường đã FILLED/CANCELED → check Algo Order (Stop Loss/Trailing Stop) nếu có algoIDStopLoss
+	if tradingMode == "futures" && algoIDStopLoss != "" {
+		// Parse algoIDStopLoss từ string sang int64
+		algoID, err := strconv.ParseInt(algoIDStopLoss, 10, 64)
+		if err == nil {
+			isRunning, status, err := ts.CheckFuturesAlgoOrderStatus(symbol, algoID)
+			if err == nil && isRunning {
+				result.IsRunning = true
+				result.RunningType = "ALGO"
+				result.AlgoStatus = status
+				fmt.Printf("✅ Order %s đã FILLED nhưng ALGO ORDER (Stop Loss) vẫn đang chạy: Status=%s\n\n",
+					exchangeOrderID, status)
+				return result
+			}
+		}
+	}
+
+	result.IsRunning = false
+	return result
+}
+
+// CheckFuturesAlgoOrderStatus checks if an algo order (Trailing Stop, Conditional SL/TP) is still active
+func (ts *TradingService) CheckFuturesAlgoOrderStatus(symbol string, algoId int64) (bool, string, error) {
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+
+	endpoint := "/fapi/v1/openAlgoOrders"
+	baseURL := adapter.FuturesAPIURL
+
+	params := url.Values{}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	signature := ts.sign(params.Encode())
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return false, "", err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return false, "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse open algo orders
+	var algoOrders []struct {
+		AlgoId       int64  `json:"algoId"`
+		Symbol       string `json:"symbol"`
+		Side         string `json:"side"`
+		TotalQty     string `json:"totalQty"`
+		ExecutedQty  string `json:"executedQty"`
+		ExecutedAmt  string `json:"executedAmt"`
+		AvgPrice     string `json:"avgPrice"`
+		ClientAlgoId string `json:"clientAlgoId"`
+		BookTime     int64  `json:"bookTime"`
+		AlgoStatus   string `json:"algoStatus"`
+		AlgoType     string `json:"algoType"`
+		UrgencyType  string `json:"urgencyType"`
+		TimeInForce  string `json:"timeInForce"`
+		PositionSide string `json:"positionSide"`
+		ReduceOnly   bool   `json:"reduceOnly"`
+	}
+
+	if err := json.Unmarshal(body, &algoOrders); err != nil {
+		return false, "", err
+	}
+
+	// Check if algoId exists in open orders
+	for _, order := range algoOrders {
+		if order.AlgoId == algoId && order.Symbol == symbol {
+			// fmt.Printf("🔵 Algo Order still ACTIVE:\n")
+			// fmt.Printf("   AlgoId: %d\n", order.AlgoId)
+			// fmt.Printf("   Symbol: %s\n", order.Symbol)
+			// fmt.Printf("   Type: %s\n", order.AlgoType)
+			// fmt.Printf("   Status: %s\n", order.AlgoStatus)
+			// fmt.Printf("   Side: %s\n", order.Side)
+			// fmt.Printf("   Total Qty: %s\n", order.TotalQty)
+			// fmt.Printf("   Executed Qty: %s\n\n", order.ExecutedQty)
+			return true, order.AlgoStatus, nil
+		}
+	}
+
+	// Not found in open orders → algo order finished/cancelled/triggered
+	fmt.Printf("⚪ Algo Order %d not in open orders → finished/cancelled/triggered\n\n", algoId)
+	return false, "finished", nil
+}
+
+// checkBittrexOrderStatus checks order status on Bittrex
+func (ts *TradingService) checkBittrexOrderStatus(config *models.TradingConfig, exchangeOrderID string, symbol string) OrderStatusResult {
+	// TODO: Implement Bittrex order status check
+	return OrderStatusResult{
+		Success: false,
+		Error:   "Bittrex order status check not implemented yet",
+	}
+}
+
+// FuturesPosition represents a Binance Futures position
+type FuturesPosition struct {
+	Symbol           string  `json:"symbol"`
+	PositionAmt      float64 `json:"positionAmt"`
+	EntryPrice       float64 `json:"entryPrice"`
+	BreakEvenPrice   float64 `json:"breakEvenPrice"`
+	MarkPrice        float64 `json:"markPrice"`
+	UnrealizedProfit float64 `json:"unRealizedProfit"`
+	LiquidationPrice float64 `json:"liquidationPrice"`
+	Leverage         int     `json:"leverage"`
+	MarginType       string  `json:"marginType"`
+	IsolatedMargin   float64 `json:"isolatedMargin"`
+	PositionSide     string  `json:"positionSide"`
+	NotionalValue    float64 `json:"notional"`
+	IsolatedWallet   float64 `json:"isolatedWallet"`
+	UpdateTime       int64   `json:"updateTime"`
+}
+
+// FuturesPositionResult represents the result of getting futures positions
+type FuturesPositionResult struct {
+	Success   bool              `json:"success"`
+	Positions []FuturesPosition `json:"positions,omitempty"`
+	Error     string            `json:"error,omitempty"`
+}
+
+// GetFuturesPositions gets all futures positions from Binance
+func (ts *TradingService) GetFuturesPositions(symbol string) FuturesPositionResult {
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+
+	endpoint := "/fapi/v2/positionRisk"
+	baseURL := adapter.FuturesAPIURL
+
+	// Prepare parameters
+	params := url.Values{}
+	if symbol != "" {
+		params.Set("symbol", symbol)
+	}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
 
 	// Sign request
 	signature := ts.sign(params.Encode())
@@ -1150,9 +1301,10 @@ func (ts *TradingService) checkBinanceOrderStatus(config *models.TradingConfig, 
 
 	// Make request
 	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+
 	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
-		return OrderStatusResult{
+		return FuturesPositionResult{
 			Success: false,
 			Error:   fmt.Sprintf("Failed to create request: %v", err),
 		}
@@ -1163,7 +1315,7 @@ func (ts *TradingService) checkBinanceOrderStatus(config *models.TradingConfig, 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return OrderStatusResult{
+		return FuturesPositionResult{
 			Success: false,
 			Error:   fmt.Sprintf("Request failed: %v", err),
 		}
@@ -1181,51 +1333,78 @@ func (ts *TradingService) checkBinanceOrderStatus(config *models.TradingConfig, 
 			errorMsg = fmt.Sprintf("%s: %s", errorMsg, msg)
 		}
 
-		return OrderStatusResult{
+		return FuturesPositionResult{
 			Success: false,
 			Error:   errorMsg,
 		}
 	}
 
-	// Parse response
-	var binanceResp struct {
-		OrderID             int64  `json:"orderId"`
-		Symbol              string `json:"symbol"`
-		Status              string `json:"status"`
-		OrigQty             string `json:"origQty"`
-		ExecutedQty         string `json:"executedQty"`
-		AvgPrice            string `json:"avgPrice"`
-		CummulativeQuoteQty string `json:"cummulativeQuoteQty"`
+	// Parse response - Binance returns array of positions
+	var binancePositions []struct {
+		Symbol           string `json:"symbol"`
+		PositionAmt      string `json:"positionAmt"`
+		EntryPrice       string `json:"entryPrice"`
+		BreakEvenPrice   string `json:"breakEvenPrice"`
+		MarkPrice        string `json:"markPrice"`
+		UnRealizedProfit string `json:"unRealizedProfit"`
+		LiquidationPrice string `json:"liquidationPrice"`
+		Leverage         string `json:"leverage"`
+		MarginType       string `json:"marginType"`
+		IsolatedMargin   string `json:"isolatedMargin"`
+		PositionSide     string `json:"positionSide"`
+		Notional         string `json:"notional"`
+		IsolatedWallet   string `json:"isolatedWallet"`
+		UpdateTime       int64  `json:"updateTime"`
 	}
 
-	if err := json.Unmarshal(body, &binanceResp); err != nil {
-		return OrderStatusResult{
+	if err := json.Unmarshal(body, &binancePositions); err != nil {
+		return FuturesPositionResult{
 			Success: false,
-			Error:   "Failed to parse response",
+			Error:   fmt.Sprintf("Failed to parse response: %v", err),
 		}
 	}
 
-	origQty, _ := strconv.ParseFloat(binanceResp.OrigQty, 64)
-	executedQty, _ := strconv.ParseFloat(binanceResp.ExecutedQty, 64)
-	avgPrice, _ := strconv.ParseFloat(binanceResp.AvgPrice, 64)
-	remaining := origQty - executedQty
+	// Convert to FuturesPosition structs and filter non-zero positions
+	positions := make([]FuturesPosition, 0)
+	for _, pos := range binancePositions {
+		posAmt, _ := strconv.ParseFloat(pos.PositionAmt, 64)
 
-	return OrderStatusResult{
-		Success:   true,
-		OrderID:   strconv.FormatInt(binanceResp.OrderID, 10),
-		Status:    strings.ToLower(binanceResp.Status), // Convert to lowercase: FILLED -> filled
-		Filled:    executedQty,
-		Remaining: remaining,
-		AvgPrice:  avgPrice,
+		// Only include positions with non-zero amount
+		if posAmt == 0 {
+			continue
+		}
+
+		entryPrice, _ := strconv.ParseFloat(pos.EntryPrice, 64)
+		breakEvenPrice, _ := strconv.ParseFloat(pos.BreakEvenPrice, 64)
+		markPrice, _ := strconv.ParseFloat(pos.MarkPrice, 64)
+		unrealizedProfit, _ := strconv.ParseFloat(pos.UnRealizedProfit, 64)
+		liquidationPrice, _ := strconv.ParseFloat(pos.LiquidationPrice, 64)
+		leverage, _ := strconv.Atoi(pos.Leverage)
+		isolatedMargin, _ := strconv.ParseFloat(pos.IsolatedMargin, 64)
+		notional, _ := strconv.ParseFloat(pos.Notional, 64)
+		isolatedWallet, _ := strconv.ParseFloat(pos.IsolatedWallet, 64)
+
+		positions = append(positions, FuturesPosition{
+			Symbol:           pos.Symbol,
+			PositionAmt:      posAmt,
+			EntryPrice:       entryPrice,
+			BreakEvenPrice:   breakEvenPrice,
+			MarkPrice:        markPrice,
+			UnrealizedProfit: unrealizedProfit,
+			LiquidationPrice: liquidationPrice,
+			Leverage:         leverage,
+			MarginType:       pos.MarginType,
+			IsolatedMargin:   isolatedMargin,
+			PositionSide:     pos.PositionSide,
+			NotionalValue:    notional,
+			IsolatedWallet:   isolatedWallet,
+			UpdateTime:       pos.UpdateTime,
+		})
 	}
-}
 
-// checkBittrexOrderStatus checks order status on Bittrex
-func (ts *TradingService) checkBittrexOrderStatus(config *models.TradingConfig, exchangeOrderID string, symbol string) OrderStatusResult {
-	// TODO: Implement Bittrex order status check
-	return OrderStatusResult{
-		Success: false,
-		Error:   "Bittrex order status check not implemented yet",
+	return FuturesPositionResult{
+		Success:   true,
+		Positions: positions,
 	}
 }
 
@@ -1460,7 +1639,10 @@ func (ts *TradingService) CancelAllTrailingStops(symbol string) error {
 	req, _ := http.NewRequest("GET", fullURL, nil)
 	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
 
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %v", err)
+	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
@@ -1964,4 +2146,126 @@ func (ts *TradingService) SetLeverage(config *models.TradingConfig, symbol strin
 
 	fmt.Printf("✅ Set leverage to %d for %s\n", leverage, symbol)
 	return nil
+}
+
+// FuturesPositionInfo represents position information from Binance Futures
+type FuturesPositionInfo struct {
+	Symbol           string  `json:"symbol"`
+	PositionAmt      float64 `json:"position_amt"`      // Position size
+	EntryPrice       float64 `json:"entry_price"`       // Entry price
+	MarkPrice        float64 `json:"mark_price"`        // Current mark price
+	UnrealizedProfit float64 `json:"unrealized_profit"` // Unrealized PnL
+	LiquidationPrice float64 `json:"liquidation_price"` // Liquidation price
+	Leverage         int     `json:"leverage"`          // Leverage
+	MarginType       string  `json:"margin_type"`       // ISOLATED or CROSS
+	IsolatedMargin   float64 `json:"isolated_margin"`   // Margin for isolated position
+	PositionSide     string  `json:"position_side"`     // BOTH, LONG, or SHORT
+	PnlPercent       float64 `json:"pnl_percent"`       // PnL percentage
+}
+
+// GetFuturesPosition gets position information for a symbol
+func (ts *TradingService) GetFuturesPosition(symbol string) (*FuturesPositionInfo, error) {
+	adapter := GetExchangeAdapter("binance", false).(*BinanceAdapter)
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	signature := ts.sign(params.Encode())
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s/fapi/v2/positionRisk?%s", adapter.FuturesAPIURL, params.Encode())
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		return nil, fmt.Errorf("get position failed (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var positions []struct {
+		Symbol           string `json:"symbol"`
+		PositionAmt      string `json:"positionAmt"`
+		EntryPrice       string `json:"entryPrice"`
+		MarkPrice        string `json:"markPrice"`
+		UnRealizedProfit string `json:"unRealizedProfit"`
+		LiquidationPrice string `json:"liquidationPrice"`
+		Leverage         string `json:"leverage"`
+		MarginType       string `json:"marginType"`
+		IsolatedMargin   string `json:"isolatedMargin"`
+		PositionSide     string `json:"positionSide"`
+	}
+
+	if err := json.Unmarshal(body, &positions); err != nil {
+		return nil, fmt.Errorf("failed to parse positions: %v, body: %s", err, string(body))
+	}
+
+	// Debug: Log all positions
+	fmt.Printf("🔍 GetFuturesPosition(%s): Found %d positions from Binance\n", symbol, len(positions))
+	for i, pos := range positions {
+		fmt.Printf("   [%d] Symbol=%s, PositionAmt=%s, Side=%s, Entry=%s, Mark=%s\n",
+			i, pos.Symbol, pos.PositionAmt, pos.PositionSide, pos.EntryPrice, pos.MarkPrice)
+	}
+
+	// Find position for this symbol
+	for _, pos := range positions {
+		if pos.Symbol == symbol {
+			posAmt, _ := strconv.ParseFloat(pos.PositionAmt, 64)
+
+			fmt.Printf("✅ Found position for %s: PositionAmt=%.8f\n", symbol, posAmt)
+
+			// Skip if no position
+			if posAmt == 0 {
+				fmt.Printf("⚠️  Position amount is 0, returning nil\n")
+				return nil, nil
+			}
+
+			entryPrice, _ := strconv.ParseFloat(pos.EntryPrice, 64)
+			markPrice, _ := strconv.ParseFloat(pos.MarkPrice, 64)
+			unrealizedPnl, _ := strconv.ParseFloat(pos.UnRealizedProfit, 64)
+			liqPrice, _ := strconv.ParseFloat(pos.LiquidationPrice, 64)
+			leverage, _ := strconv.Atoi(pos.Leverage)
+			isolatedMargin, _ := strconv.ParseFloat(pos.IsolatedMargin, 64)
+
+			// Calculate PnL percentage
+			pnlPercent := 0.0
+			if entryPrice > 0 {
+				pnlPercent = (unrealizedPnl / (math.Abs(posAmt) * entryPrice)) * 100
+			}
+
+			fmt.Printf("📊 Position Details: Entry=%.2f, Mark=%.2f, PnL=%.2f (%.2f%%), Leverage=%dx\n",
+				entryPrice, markPrice, unrealizedPnl, pnlPercent, leverage)
+
+			return &FuturesPositionInfo{
+				Symbol:           pos.Symbol,
+				PositionAmt:      posAmt,
+				EntryPrice:       entryPrice,
+				MarkPrice:        markPrice,
+				UnrealizedProfit: unrealizedPnl,
+				LiquidationPrice: liqPrice,
+				Leverage:         leverage,
+				MarginType:       pos.MarginType,
+				IsolatedMargin:   isolatedMargin,
+				PositionSide:     pos.PositionSide,
+				PnlPercent:       pnlPercent,
+			}, nil
+		}
+	}
+
+	fmt.Printf("❌ No position found for symbol %s\n", symbol)
+	return nil, nil
 }

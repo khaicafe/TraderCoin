@@ -68,31 +68,33 @@ type TradingConfig struct {
 }
 
 type Order struct {
-	ID              uint           `gorm:"primaryKey" json:"id"`
-	UserID          uint           `gorm:"not null;index" json:"user_id"`
-	ExchangeKeyID   uint           `gorm:"index" json:"exchange_key_id"` // Link to ExchangeKey (API Key)
-	BotConfigID     uint           `gorm:"index" json:"bot_config_id"`   // Link to TradingConfig
-	Exchange        string         `gorm:"not null;size:50" json:"exchange"`
-	Symbol          string         `gorm:"not null;size:50" json:"symbol"`
-	OrderID         string         `gorm:"size:255;index" json:"order_id"`  // Exchange's order ID
-	ClientOrderID   string         `gorm:"size:255" json:"client_order_id"` // Our generated order ID
-	Side            string         `gorm:"not null;size:10" json:"side"`
-	Type            string         `gorm:"not null;size:20" json:"type"`
-	Quantity        float64        `gorm:"type:decimal(20,8)" json:"quantity"`
-	Price           float64        `gorm:"type:decimal(20,8)" json:"price"`
-	FilledPrice     float64        `gorm:"type:decimal(20,8)" json:"filled_price"`
-	FilledQuantity  float64        `gorm:"type:decimal(20,8)" json:"filled_quantity"` // Executed quantity
-	CurrentPrice    float64        `gorm:"type:decimal(20,8)" json:"current_price"`   // Current market price from exchange
-	Status          string         `gorm:"size:50;default:pending" json:"status"`
-	TradingMode     string         `gorm:"size:20;default:spot" json:"trading_mode"` // spot, futures, margin
-	Leverage        int            `gorm:"default:1" json:"leverage"`
-	StopLossPrice   float64        `gorm:"type:decimal(20,8)" json:"stop_loss_price"`
-	TakeProfitPrice float64        `gorm:"type:decimal(20,8)" json:"take_profit_price"`
-	PnL             float64        `gorm:"type:decimal(20,8)" json:"pnl"`
-	PnLPercent      float64        `gorm:"type:decimal(10,2)" json:"pnl_percent"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	ID               uint           `gorm:"primaryKey" json:"id"`
+	UserID           uint           `gorm:"not null;index" json:"user_id"`
+	ExchangeKeyID    uint           `gorm:"index" json:"exchange_key_id"` // Link to ExchangeKey (API Key)
+	BotConfigID      uint           `gorm:"index" json:"bot_config_id"`   // Link to TradingConfig
+	Exchange         string         `gorm:"not null;size:50" json:"exchange"`
+	Symbol           string         `gorm:"not null;size:50" json:"symbol"`
+	OrderID          string         `gorm:"size:255;index" json:"order_id"`  // Exchange's order ID
+	ClientOrderID    string         `gorm:"size:255" json:"client_order_id"` // Our generated order ID
+	Side             string         `gorm:"not null;size:10" json:"side"`
+	Type             string         `gorm:"not null;size:20" json:"type"`
+	Quantity         float64        `gorm:"type:decimal(20,8)" json:"quantity"`
+	Price            float64        `gorm:"type:decimal(20,8)" json:"price"`
+	FilledPrice      float64        `gorm:"type:decimal(20,8)" json:"filled_price"`
+	FilledQuantity   float64        `gorm:"type:decimal(20,8)" json:"filled_quantity"` // Executed quantity
+	CurrentPrice     float64        `gorm:"type:decimal(20,8)" json:"current_price"`   // Current market price from exchange
+	Status           string         `gorm:"size:50;default:pending" json:"status"`
+	TradingMode      string         `gorm:"size:20;default:spot" json:"trading_mode"` // spot, futures, margin
+	Leverage         int            `gorm:"default:1" json:"leverage"`
+	StopLossPrice    float64        `gorm:"type:decimal(20,8)" json:"stop_loss_price"`
+	TakeProfitPrice  float64        `gorm:"type:decimal(20,8)" json:"take_profit_price"`
+	AlgoIDStopLoss   string         `gorm:"size:100" json:"algo_id_stop_loss"`   // Binance Algo Order ID for Stop Loss
+	AlgoIDTakeProfit string         `gorm:"size:100" json:"algo_id_take_profit"` // Binance Algo Order ID for Take Profit
+	PnL              float64        `gorm:"type:decimal(20,8)" json:"pnl"`
+	PnLPercent       float64        `gorm:"type:decimal(10,2)" json:"pnl_percent"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relationships
 	User User `gorm:"foreignKey:UserID" json:"-"`

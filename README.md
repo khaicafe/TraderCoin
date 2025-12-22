@@ -369,3 +369,10 @@ curl -X POST http://localhost:8080/api/v1/signals/webhook/74c7c7f4ce33 \
 "strategy": "Test WebSocket",
 "message": "Testing real-time notification"
 }'
+
+note: chưa làm
+priceProtect":false
+
+Response Body: {"orderId":8389766058155948588,"symbol":"ETHUSDT","status":"FILLED","clientOrderId":"AL0F55jVYngvTWweEpAFb2","price":"0.00","avgPrice":"3057.89000","origQty":"0.007","executedQty":"0.007","cumQuote":"21.40523","timeInForce":"GTC","type":"MARKET","reduceOnly":false,"closePosition":false,"side":"BUY","positionSide":"BOTH","stopPrice":"0.00","workingType":"CONTRACT_PRICE","priceProtect":false,"origType":"MARKET","priceMatch":"NONE","selfTradePreventionMode":"EXPIRE_MAKER","goodTillDate":0,"time":1766412825838,"updateTime":1766412825838}
+
+Response Body: {"orderId":8389766058138516683,"symbol":"ETHUSDT","status":"FILLED","clientOrderId":"fYgXbSXkFkN3j8VP3SG9IF","price":"0.00","avgPrice":"3052.27000","origQty":"0.007","executedQty":"0.007","cumQuote":"21.36589","timeInForce":"GTC","type":"MARKET","reduceOnly":false,"closePosition":false,"side":"BUY","positionSide":"BOTH","stopPrice":"0.00","workingType":"CONTRACT_PRICE","priceProtect":false,"origType":"MARKET","priceMatch":"NONE","selfTradePreventionMode":"EXPIRE_MAKER","goodTillDate":0,"time":1766411274076,"updateTime":1766411274076}
