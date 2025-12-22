@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +24,11 @@ type TradingService struct {
 	APISecret string
 	Exchange  string
 }
+
+const (
+	// MinNotionalUSDT is Binance Futures minimum notional value
+	MinNotionalUSDT = 100.0
+)
 
 // OrderResult represents the result of placing an order
 type OrderResult struct {
@@ -45,6 +52,88 @@ func NewTradingService(apiKey, apiSecret, exchange string) *TradingService {
 		APISecret: apiSecret,
 		Exchange:  exchange,
 	}
+}
+
+// GetCurrentPrice lấy giá hiện tại của symbol từ Binance
+func (ts *TradingService) GetCurrentPrice(config *models.TradingConfig, symbol string) (float64, error) {
+	tradingMode := config.TradingMode
+	if tradingMode == "" {
+		tradingMode = "spot"
+	}
+
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+
+	var apiURL string
+	var endpoint string
+	if tradingMode == "futures" {
+		apiURL = adapter.FuturesAPIURL
+		endpoint = "/fapi/v1/ticker/price"
+	} else {
+		apiURL = adapter.SpotAPIURL
+		endpoint = "/api/v3/ticker/price"
+	}
+
+	fullURL := fmt.Sprintf("%s%s?symbol=%s", apiURL, endpoint, symbol)
+
+	resp, err := http.Get(fullURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get price: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var priceResp struct {
+		Symbol string `json:"symbol"`
+		Price  string `json:"price"`
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &priceResp); err != nil {
+		return 0, fmt.Errorf("failed to parse price: %w", err)
+	}
+
+	price, err := strconv.ParseFloat(priceResp.Price, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid price format: %w", err)
+	}
+
+	return price, nil
+}
+
+// ValidateNotional kiểm tra minimum notional cho Binance Futures
+func (ts *TradingService) ValidateNotional(config *models.TradingConfig, symbol string, quantity, price float64) error {
+	if config.TradingMode != "futures" {
+		return nil // Spot không cần validate notional
+	}
+
+	// Nếu là MARKET order hoặc chưa có price, lấy giá hiện tại
+	if price == 0 {
+		currentPrice, err := ts.GetCurrentPrice(config, symbol)
+		if err != nil {
+			return fmt.Errorf("failed to get current price: %w", err)
+		}
+		price = currentPrice
+	}
+
+	// Tính notional value
+	notional := quantity * price
+
+	// Kiểm tra minimum
+	// if notional < MinNotionalUSDT {
+	// 	minQuantity := MinNotionalUSDT / price
+	// 	return fmt.Errorf(
+	// 		"Order value ($%.2f) is below Binance Futures minimum ($%.2f USD). "+
+	// 			"Please increase quantity to at least %.8f %s (at current price $%.2f)",
+	// 		notional, MinNotionalUSDT, minQuantity, symbol, price,
+	// 	)
+	// }
+
+	fmt.Printf("✅ NOTIONAL VALIDATION PASSED:\n")
+	fmt.Printf("   Quantity: %.8f\n", quantity)
+	fmt.Printf("   Price: $%.2f\n", price)
+	fmt.Printf("   Notional: $%.2f (minimum: $%.2f)\n\n", notional, MinNotionalUSDT)
+
+	return nil
 }
 
 // PlaceOrder places an order on the exchange
@@ -78,7 +167,59 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	var endpoint string
 	if tradingMode == "futures" {
 		baseURL = adapter.FuturesAPIURL
-		endpoint = "/fapi/v1/order"
+		endpoint = "/fapi/v1/order" // Production endpoint
+
+		// Validate minimum notional cho Futures
+		// if err := ts.ValidateNotional(config, symbol, amount, price); err != nil {
+		// 	return OrderResult{
+		// 		Success: false,
+		// 		Error:   err.Error(),
+		// 	}
+		// }
+
+		////////// STEP 1: Set Margin Mode (ISOLATED or CROSSED) - only once per symbol
+		if err := ts.SetMarginType(config, symbol, "ISOLATED"); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to set margin type: %v\n", err)
+			// Don't fail here, continue with order placement
+		}
+
+		////////// STEP 2: Set Leverage - only once per symbol
+		if config.Leverage > 0 {
+			if err := ts.SetLeverage(config, symbol, config.Leverage); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to set leverage: %v\n", err)
+				// Don't fail here, continue with order placement
+			}
+		}
+
+		////////// STEP 3: Pre-cleanup (correct order): first close position, then cancel all open orders
+		closeRes := ts.CloseFuturesPositionMarket(config, symbol)
+		if closeRes.Success {
+			fmt.Printf("✅ Closed existing position for %s before placing new order\n", symbol)
+		} else if closeRes.Error != "no-position" { // no-position is not an error
+			fmt.Printf("⚠️  Failed to close existing position for %s: %s\n", symbol, closeRes.Error)
+		}
+
+		cleanupErr := ts.CancelAllOpenOrders(config, symbol)
+		if cleanupErr != nil {
+			fmt.Printf("⚠️  Failed to cancel open orders for %s: %v\n", symbol, cleanupErr)
+		} else {
+			fmt.Printf("✅ Canceled all open orders for %s before placing new order\n", symbol)
+		}
+
+		////////// Cancel any existing Trailing Stop (ALGO) orders for the symbol //////////
+		err := ts.CancelAllTrailingStops(symbol)
+		if err != nil {
+			fmt.Println("Canceled:", err)
+		}
+
+		time.Sleep(500 * time.Millisecond)
+
+		// return OrderResult{
+		// 	Success: false,
+		// 	Error:   err.Error(),
+		// }
+
+		// small delay to ensure state settles
 	} else {
 		baseURL = adapter.SpotAPIURL
 		endpoint = "/api/v3/order"
@@ -103,6 +244,12 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	}
 
 	params.Set("quantity", fmt.Sprintf("%.8f", amount))
+
+	// For Futures: add leverage if configured
+	if tradingMode == "futures" && config.Leverage > 0 {
+		params.Set("leverage", strconv.Itoa(config.Leverage))
+	}
+
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
 	// Create signature
@@ -114,6 +261,7 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 
 	// Build full URL
 	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	fmt.Printf("fullURL Code: %s\n", fullURL)
 
 	// Create request
 	req, err := http.NewRequest("POST", fullURL, nil)
@@ -227,7 +375,24 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	fmt.Printf("   Side: %s\n", binanceResp.Side)
 	fmt.Printf("   Quantity: %s\n", binanceResp.OrigQty)
 	fmt.Printf("   Filled Price: %.8f\n", filledPrice)
-	fmt.Printf("   Status: %s\n\n", binanceResp.Status)
+	fmt.Printf("   Status: %s\n", binanceResp.Status)
+	fmt.Printf("   Trading Mode: %s\n", tradingMode)
+	fmt.Printf("   Stop Loss %%: %.2f\n", config.StopLossPercent)
+	fmt.Printf("   Take Profit %%: %.2f\n\n", config.TakeProfitPercent)
+
+	//////////// Đặt TP/SL tự động nếu có cấu hình trong bot (chỉ cho Futures) //////////
+	if tradingMode == "futures" {
+		ts.placeAutoTPSL(config, symbol, binanceResp, binanceSide, binanceType, filledPrice, orderPrice, quantity)
+	}
+
+	//////////// Đặt trailing stop nếu có cấu hình trong bot (chỉ cho Futures) //////////
+	if tradingMode == "futures" && config.TrailingStopPercent > 0 {
+		fmt.Printf("📊 Placing TRAILING STOP:\n")
+		fmt.Printf("   Trailing Stop %%: %.2f%%\n", config.TrailingStopPercent)
+		fmt.Printf("   Side: %s\n\n", binanceSide)
+
+		ts.PlaceTrailingStopOrder(config, symbol, config.TrailingStopPercent, quantity, binanceSide)
+	}
 
 	return OrderResult{
 		Success:     true,
@@ -240,6 +405,163 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 		FilledPrice: filledPrice,
 		Status:      strings.ToLower(binanceResp.Status), // Convert to lowercase: FILLED -> filled
 	}
+}
+
+// placeAutoTPSL tự động đặt TP/SL cho Futures orders
+func (ts *TradingService) placeAutoTPSL(
+	config *models.TradingConfig,
+	symbol string,
+	binanceResp struct {
+		OrderID             int64  `json:"orderId"`
+		Symbol              string `json:"symbol"`
+		Side                string `json:"side"`
+		Type                string `json:"type"`
+		OrigQty             string `json:"origQty"`
+		Price               string `json:"price"`
+		ExecutedQty         string `json:"executedQty"`
+		CummulativeQuoteQty string `json:"cummulativeQuoteQty"`
+		Status              string `json:"status"`
+		AvgPrice            string `json:"avgPrice"`
+		Fills               []struct {
+			Price string `json:"price"`
+			Qty   string `json:"qty"`
+		} `json:"fills"`
+	},
+	binanceSide string,
+	binanceType string,
+	filledPrice float64,
+	orderPrice float64,
+	quantity float64,
+) {
+	statusFilled := "❌"
+	shouldPlaceTPSL := false
+
+	// Accept both FILLED and NEW status for MARKET orders
+	if binanceResp.Status == "FILLED" {
+		statusFilled = "✅"
+		shouldPlaceTPSL = true
+	} else if binanceResp.Status == "NEW" && binanceType == "MARKET" {
+		statusFilled = "⚠️  (NEW but MARKET order, will place TP/SL)"
+		shouldPlaceTPSL = true
+
+		// For MARKET orders with NEW status, wait a bit for fill
+		fmt.Printf("⏳ Waiting 2 seconds for MARKET order to fill...\n")
+		time.Sleep(2 * time.Second)
+
+		// Check order status again
+		statusResult := ts.CheckOrderStatus(config, strconv.FormatInt(binanceResp.OrderID, 10), symbol)
+		if statusResult.Success && statusResult.Status == "filled" {
+			fmt.Printf("✅ Order now FILLED after check\n")
+			// Update filled price from status check
+			if statusResult.AvgPrice > 0 {
+				filledPrice = statusResult.AvgPrice
+			}
+		}
+	}
+
+	slEnabled := "❌"
+	if config.StopLossPercent > 0 {
+		slEnabled = "✅"
+	}
+
+	tpEnabled := "❌"
+	if config.TakeProfitPercent > 0 {
+		tpEnabled = "✅"
+	}
+
+	fmt.Printf("🔍 CHECKING TP/SL CONDITIONS:\n")
+	fmt.Printf("   Trading Mode: futures (required: futures) ✅\n")
+	fmt.Printf("   Order Status: %s (required: FILLED) %s\n", binanceResp.Status, statusFilled)
+	fmt.Printf("   Stop Loss %%: %.2f %s\n", config.StopLossPercent, slEnabled)
+	fmt.Printf("   Take Profit %%: %.2f %s\n\n", config.TakeProfitPercent, tpEnabled)
+
+	if !shouldPlaceTPSL {
+		fmt.Printf("⚠️  Skipping TP/SL placement (conditions not met)\n\n")
+		return
+	}
+
+	// Sử dụng filled price hoặc order price để tính TP/SL
+	entryPrice := filledPrice
+	if entryPrice == 0 {
+		entryPrice = orderPrice
+	}
+
+	// Nếu vẫn không có entry price, lấy giá hiện tại
+	if entryPrice == 0 {
+		currentPrice, err := ts.GetCurrentPrice(config, symbol)
+		if err == nil {
+			entryPrice = currentPrice
+			fmt.Printf("⚠️  Using current price as entry: %.8f\n", entryPrice)
+		} else {
+			fmt.Printf("❌ Cannot determine entry price, skipping TP/SL\n\n")
+			return
+		}
+	}
+
+	// Determine close side (opposite of entry side)
+	closeSide := "SELL"
+	if binanceSide == "SELL" {
+		closeSide = "BUY"
+	}
+
+	// Place Stop Loss if configured
+	if config.StopLossPercent > 0 {
+		var stopLossPrice float64
+		if binanceSide == "BUY" {
+			// LONG position: SL below entry
+			stopLossPrice = entryPrice * (1 - config.StopLossPercent/100)
+		} else {
+			// SHORT position: SL above entry
+			stopLossPrice = entryPrice * (1 + config.StopLossPercent/100)
+		}
+
+		fmt.Printf("📊 Placing STOP LOSS:\n")
+		fmt.Printf("   Entry Price: %.8f\n", entryPrice)
+		fmt.Printf("   Stop Loss %%: %.2f%%\n", config.StopLossPercent)
+		fmt.Printf("   Stop Loss Price: %.8f\n", stopLossPrice)
+		fmt.Printf("   Side: %s\n\n", closeSide)
+
+		slResult := ts.PlaceStopLossOrder(config, symbol, stopLossPrice, quantity, closeSide)
+		if !slResult.Success {
+			fmt.Printf("⚠️  Failed to place Stop Loss: %s\n\n", slResult.Error)
+		}
+	}
+
+	// Place Trailing Stop if configured (Futures only)
+	// if config.TrailingStopPercent > 0 {
+	// 	fmt.Printf("📊 Placing TRAILING STOP:\n")
+	// 	fmt.Printf("   Entry Price: %.8f\n", entryPrice)
+	// 	fmt.Printf("   Trailing Stop %%: %.2f%%\n", config.TrailingStopPercent)
+	// 	fmt.Printf("   Side: %s\n\n", binanceSide)
+
+	// 	tsResult := ts.PlaceTrailingStopOrder(config, symbol, config.TrailingStopPercent, quantity, binanceSide)
+	// 	if !tsResult.Success {
+	// 		fmt.Printf("⚠️  Failed to place Trailing Stop: %s\n\n", tsResult.Error)
+	// 	}
+	// }
+
+	// Place Take Profit if configured
+	// if config.TakeProfitPercent > 0 {
+	// 	var takeProfitPrice float64
+	// 	if binanceSide == "BUY" {
+	// 		// LONG position: TP above entry
+	// 		takeProfitPrice = entryPrice * (1 + config.TakeProfitPercent/100)
+	// 	} else {
+	// 		// SHORT position: TP below entry
+	// 		takeProfitPrice = entryPrice * (1 - config.TakeProfitPercent/100)
+	// 	}
+
+	// 	fmt.Printf("📊 Placing TAKE PROFIT:\n")
+	// 	fmt.Printf("   Entry Price: %.8f\n", entryPrice)
+	// 	fmt.Printf("   Take Profit %%: %.2f%%\n", config.TakeProfitPercent)
+	// 	fmt.Printf("   Take Profit Price: %.8f\n", takeProfitPrice)
+	// 	fmt.Printf("   Side: %s\n\n", closeSide)
+
+	// 	tpResult := ts.PlaceTakeProfitOrder(config, symbol, takeProfitPrice, quantity, closeSide)
+	// 	if !tpResult.Success {
+	// 		fmt.Printf("⚠️  Failed to place Take Profit: %s\n\n", tpResult.Error)
+	// 	}
+	// }
 }
 
 // placeBittrexOrder places an order on Bittrex
@@ -384,138 +706,136 @@ func (ts *TradingService) PlaceStopLossOrder(config *models.TradingConfig, symbo
 		}
 	}
 
-	isTestnet := false
+	// isTestnet := false
 	tradingMode := config.TradingMode
 	if tradingMode == "" {
 		tradingMode = "spot"
 	}
 
-	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
-
-	var baseURL string
-	var endpoint string
+	// For Futures: use Algo Order API (closePosition endpoint)
 	if tradingMode == "futures" {
-		baseURL = adapter.FuturesAPIURL
-		endpoint = "/fapi/v1/order"
-	} else {
-		// Spot doesn't support STOP_MARKET, use STOP_LOSS_LIMIT
-		baseURL = adapter.SpotAPIURL
-		endpoint = "/api/v3/order"
+		return ts.PlaceAlgoStopLoss(config, symbol, stopPrice, strings.ToUpper(side), "LONG")
 	}
 
-	// Prepare parameters
-	params := url.Values{}
-	params.Set("symbol", symbol)
-	params.Set("side", strings.ToUpper(side))
+	// adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
 
-	if tradingMode == "futures" {
-		// Futures: Use STOP_MARKET with closePosition
-		params.Set("type", "STOP_MARKET")
-		params.Set("stopPrice", fmt.Sprintf("%.8f", stopPrice))
-		params.Set("closePosition", "true") // Close entire position
-	} else {
-		// Spot: Use STOP_LOSS_LIMIT
-		params.Set("type", "STOP_LOSS_LIMIT")
-		params.Set("quantity", fmt.Sprintf("%.8f", quantity))
-		params.Set("stopPrice", fmt.Sprintf("%.8f", stopPrice))
-		params.Set("price", fmt.Sprintf("%.8f", stopPrice*0.99)) // Slightly lower to ensure execution
-		params.Set("timeInForce", "GTC")
-	}
+	// var baseURL string
+	// var endpoint string
+	// // Spot doesn't support STOP_MARKET, use STOP_LOSS_LIMIT
+	// baseURL = adapter.SpotAPIURL
+	// endpoint = "/api/v3/order"
 
-	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	// // Prepare parameters
+	// params := url.Values{}
+	// params.Set("symbol", symbol)
+	// params.Set("side", strings.ToUpper(side))
 
-	// Create signature
-	queryString := params.Encode()
-	h := hmac.New(sha256.New, []byte(ts.APISecret))
-	h.Write([]byte(queryString))
-	signature := hex.EncodeToString(h.Sum(nil))
-	params.Set("signature", signature)
+	// // Spot: Use STOP_LOSS_LIMIT
+	// params.Set("type", "STOP_LOSS_LIMIT")
+	// params.Set("quantity", fmt.Sprintf("%.8f", quantity))
+	// params.Set("stopPrice", fmt.Sprintf("%.8f", stopPrice))
+	// params.Set("price", fmt.Sprintf("%.8f", stopPrice*0.99)) // Slightly lower to ensure execution
+	// params.Set("timeInForce", "GTC")
 
-	// Build full URL
-	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	// params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
-	// Create request
-	req, err := http.NewRequest("POST", fullURL, nil)
-	if err != nil {
-		return OrderResult{
-			Success:      false,
-			Error:        "Failed to create stop loss order request",
-			ErrorDetails: err.Error(),
-		}
-	}
+	// // Create signature
+	// queryString := params.Encode()
+	// h := hmac.New(sha256.New, []byte(ts.APISecret))
+	// h.Write([]byte(queryString))
+	// signature := hex.EncodeToString(h.Sum(nil))
+	// params.Set("signature", signature)
 
-	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+	// // Build full URL
+	// fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
 
-	// Make request
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return OrderResult{
-			Success:      false,
-			Error:        "Failed to place stop loss order",
-			ErrorDetails: err.Error(),
-		}
-	}
-	defer resp.Body.Close()
+	// // Create request
+	// req, err := http.NewRequest("POST", fullURL, nil)
+	// if err != nil {
+	// 	return OrderResult{
+	// 		Success:      false,
+	// 		Error:        "Failed to create stop loss order request",
+	// 		ErrorDetails: err.Error(),
+	// 	}
+	// }
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return OrderResult{
-			Success:      false,
-			Error:        "Failed to read stop loss response",
-			ErrorDetails: err.Error(),
-		}
-	}
+	// req.Header.Set("X-MBX-APIKEY", ts.APIKey)
 
-	// Log raw response from exchange
-	fmt.Printf("\n🔵 STOP LOSS ORDER - Exchange Response:\n")
-	fmt.Printf("Status Code: %d\n", resp.StatusCode)
-	fmt.Printf("Response Body: %s\n\n", string(body))
+	// // Make request
+	// client := &http.Client{Timeout: 30 * time.Second}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	return OrderResult{
+	// 		Success:      false,
+	// 		Error:        "Failed to place stop loss order",
+	// 		ErrorDetails: err.Error(),
+	// 	}
+	// }
+	// defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		var errorResp map[string]interface{}
-		json.Unmarshal(body, &errorResp)
+	// body, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	return OrderResult{
+	// 		Success:      false,
+	// 		Error:        "Failed to read stop loss response",
+	// 		ErrorDetails: err.Error(),
+	// 	}
+	// }
 
-		errorMsg := fmt.Sprintf("Stop loss order failed (status %d)", resp.StatusCode)
-		if msg, ok := errorResp["msg"].(string); ok {
-			errorMsg = fmt.Sprintf("%s: %s", errorMsg, msg)
-		}
+	// // Log raw response from exchange
+	// fmt.Printf("\n🔵 STOP LOSS ORDER - Exchange Response:\n")
+	// fmt.Printf("Status Code: %d\n", resp.StatusCode)
+	// fmt.Printf("Response Body: %s\n\n", string(body))
 
-		fmt.Printf("❌ STOP LOSS ERROR: %s\n", errorMsg)
-		fmt.Printf("Error Details: %+v\n\n", errorResp)
+	// if resp.StatusCode != http.StatusOK {
+	// 	var errorResp map[string]interface{}
+	// 	json.Unmarshal(body, &errorResp)
 
-		return OrderResult{
-			Success:      false,
-			Error:        errorMsg,
-			ErrorDetails: errorResp,
-		}
-	}
+	// 	errorMsg := fmt.Sprintf("Stop loss order failed (status %d)", resp.StatusCode)
+	// 	if msg, ok := errorResp["msg"].(string); ok {
+	// 		errorMsg = fmt.Sprintf("%s: %s", errorMsg, msg)
+	// 	}
 
-	var binanceResp struct {
-		OrderID   int64  `json:"orderId"`
-		Symbol    string `json:"symbol"`
-		Status    string `json:"status"`
-		Type      string `json:"type"`
-		Side      string `json:"side"`
-		StopPrice string `json:"stopPrice"`
-	}
+	// 	fmt.Printf("❌ STOP LOSS ERROR: %s\n", errorMsg)
+	// 	fmt.Printf("Error Details: %+v\n\n", errorResp)
 
-	json.Unmarshal(body, &binanceResp)
+	// 	return OrderResult{
+	// 		Success:      false,
+	// 		Error:        errorMsg,
+	// 		ErrorDetails: errorResp,
+	// 	}
+	// }
 
-	// Log success details
-	fmt.Printf("✅ STOP LOSS ORDER PLACED:\n")
-	fmt.Printf("   OrderID: %d\n", binanceResp.OrderID)
-	fmt.Printf("   Symbol: %s\n", binanceResp.Symbol)
-	fmt.Printf("   Type: %s\n", binanceResp.Type)
-	fmt.Printf("   Side: %s\n", binanceResp.Side)
-	fmt.Printf("   Stop Price: %s\n", binanceResp.StopPrice)
-	fmt.Printf("   Status: %s\n\n", binanceResp.Status)
+	// var binanceResp struct {
+	// 	OrderID   int64  `json:"orderId"`
+	// 	Symbol    string `json:"symbol"`
+	// 	Status    string `json:"status"`
+	// 	Type      string `json:"type"`
+	// 	Side      string `json:"side"`
+	// 	StopPrice string `json:"stopPrice"`
+	// }
+
+	// json.Unmarshal(body, &binanceResp)
+
+	// // Log success details
+	// fmt.Printf("✅ STOP LOSS ORDER PLACED:\n")
+	// fmt.Printf("   OrderID: %d\n", binanceResp.OrderID)
+	// fmt.Printf("   Symbol: %s\n", binanceResp.Symbol)
+	// fmt.Printf("   Type: %s\n", binanceResp.Type)
+	// fmt.Printf("   Side: %s\n", binanceResp.Side)
+	// fmt.Printf("   Stop Price: %s\n", binanceResp.StopPrice)
+	// fmt.Printf("   Status: %s\n\n", binanceResp.Status)
+
+	// return OrderResult{
+	// 	Success: true,
+	// 	OrderID: strconv.FormatInt(binanceResp.OrderID, 10),
+	// 	Symbol:  binanceResp.Symbol,
+	// 	Status:  strings.ToLower(binanceResp.Status), // Convert to lowercase
+	// }
 
 	return OrderResult{
-		Success: true,
-		OrderID: strconv.FormatInt(binanceResp.OrderID, 10),
-		Symbol:  binanceResp.Symbol,
-		Status:  strings.ToLower(binanceResp.Status), // Convert to lowercase
+		Success: false,
+		Error:   "Stop loss order placement not implemented for this trading mode",
 	}
 }
 
@@ -534,36 +854,28 @@ func (ts *TradingService) PlaceTakeProfitOrder(config *models.TradingConfig, sym
 		tradingMode = "spot"
 	}
 
+	// For Futures: use Algo Order API (closePosition endpoint)
+	if tradingMode == "futures" {
+		return ts.PlaceAlgoTakeProfit(config, symbol, takeProfitPrice, side, "LONG")
+	}
+
 	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
 
 	var baseURL string
 	var endpoint string
-	if tradingMode == "futures" {
-		baseURL = adapter.FuturesAPIURL
-		endpoint = "/fapi/v1/order"
-	} else {
-		baseURL = adapter.SpotAPIURL
-		endpoint = "/api/v3/order"
-	}
+	// Spot: Use TAKE_PROFIT_LIMIT
+	baseURL = adapter.SpotAPIURL
+	endpoint = "/api/v3/order"
 
 	// Prepare parameters
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("side", strings.ToUpper(side))
-
-	if tradingMode == "futures" {
-		// Futures: Use TAKE_PROFIT_MARKET with closePosition
-		params.Set("type", "TAKE_PROFIT_MARKET")
-		params.Set("stopPrice", fmt.Sprintf("%.8f", takeProfitPrice))
-		params.Set("closePosition", "true") // Close entire position
-	} else {
-		// Spot: Use TAKE_PROFIT_LIMIT
-		params.Set("type", "TAKE_PROFIT_LIMIT")
-		params.Set("quantity", fmt.Sprintf("%.8f", quantity))
-		params.Set("stopPrice", fmt.Sprintf("%.8f", takeProfitPrice))
-		params.Set("price", fmt.Sprintf("%.8f", takeProfitPrice*1.01)) // Slightly higher to ensure execution
-		params.Set("timeInForce", "GTC")
-	}
+	params.Set("type", "TAKE_PROFIT_LIMIT")
+	params.Set("quantity", fmt.Sprintf("%.8f", quantity))
+	params.Set("stopPrice", fmt.Sprintf("%.8f", takeProfitPrice))
+	params.Set("price", fmt.Sprintf("%.8f", takeProfitPrice*1.01)) // Slightly higher to ensure execution
+	params.Set("timeInForce", "GTC")
 
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
@@ -659,6 +971,124 @@ func (ts *TradingService) PlaceTakeProfitOrder(config *models.TradingConfig, sym
 		OrderID: strconv.FormatInt(binanceResp.OrderID, 10),
 		Symbol:  binanceResp.Symbol,
 		Status:  strings.ToLower(binanceResp.Status), // Convert to lowercase
+	}
+}
+
+// PlaceTrailingStopOrder places a trailing stop order on Binance Futures
+func (ts *TradingService) PlaceTrailingStopOrder(
+	config *models.TradingConfig,
+	symbol string,
+	trailingStopPercent float64, // ví dụ 1.5 cho 1.5%
+	quantity float64, // số lượng cần đóng (bắt buộc cho Trailing Stop)
+	side string, // side của vị thế mở: "BUY" (LONG) hoặc "SELL" (SHORT)
+) OrderResult {
+
+	if ts.Exchange != "binance" || config.TradingMode != "futures" {
+		return OrderResult{Success: false, Error: "Trailing stop only supported on Binance Futures"}
+	}
+
+	adapter := GetExchangeAdapter("binance", false).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/algoOrder"
+
+	// Determine closing side
+	closeSide := "SELL"                  // đóng LONG
+	if strings.ToUpper(side) == "SELL" { // vị thế SHORT → đóng bằng BUY
+		closeSide = "BUY"
+	}
+
+	params := url.Values{}
+	params.Set("algoType", "CONDITIONAL") // ⭐ Bắt buộc và duy nhất: CONDITIONAL
+	params.Set("symbol", symbol)
+	params.Set("side", closeSide)
+	params.Set("type", "TRAILING_STOP_MARKET") // type đúng
+
+	params.Set("callbackRate", fmt.Sprintf("%.2f", trailingStopPercent)) // 1.0 = 1%, min 0.1 max 10
+
+	// activationPrice (tên đúng trong docs là activatePrice, không phải activationPrice)
+	// Nếu không gửi, default = giá hiện tại (tốt nhất cho trailing ngay lập tức)
+	// Nếu muốn delay activation, gửi giá cụ thể (ví dụ cao hơn cho SELL trailing)
+	// params.Set("activatePrice", fmt.Sprintf("%.2f", currentPrice))
+
+	params.Set("quantity", fmt.Sprintf("%.8f", quantity)) // ⭐ Bắt buộc quantity cho TRAILING_STOP_MARKET
+	params.Set("reduceOnly", "TRUE")                      // ⭐ Thêm dòng này
+	params.Set("workingType", "MARK_PRICE")
+	params.Set("priceProtect", "TRUE")
+
+	// Nếu Hedge Mode → uncomment và set đúng LONG/SHORT
+	// params.Set("positionSide", "LONG") // hoặc "SHORT"
+
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	query := params.Encode()
+	signature := ts.sign(query)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+
+	// =======================
+	// 🟣 DEBUG: REQUEST LOG
+	// =======================
+	fmt.Println("\n========== BINANCE TRAILING STOP REQUEST ==========")
+	fmt.Println("URL:", baseURL+endpoint)
+	fmt.Println("METHOD: POST")
+	fmt.Println("QUERY:", params.Encode())
+	fmt.Println("PARAMS:")
+	for k, v := range params {
+		fmt.Printf("  %s = %v\n", k, v)
+	}
+	fmt.Println("==================================================")
+
+	req, err := http.NewRequest("POST", fullURL, nil)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	// =======================
+	// 🟣 DEBUG: RESPONSE LOG
+	// =======================
+	fmt.Println("\n========== BINANCE TRAILING STOP RESPONSE =========")
+	fmt.Println("HTTP STATUS:", resp.StatusCode)
+	fmt.Println("RAW BODY:", string(body))
+	fmt.Println("==================================================")
+
+	if resp.StatusCode != http.StatusOK {
+		return OrderResult{
+			Success: false,
+			Error:   fmt.Sprintf("Trailing stop failed: %s", string(body)),
+		}
+	}
+
+	// Response trả về algoId (không phải orderId)
+	var result struct {
+		AlgoID int64 `json:"algoId"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return OrderResult{
+			Success: false,
+			Error:   "Failed to parse Binance response",
+		}
+	}
+
+	fmt.Println("\n✅ TRAILING STOP PLACED SUCCESSFULLY")
+	fmt.Println("AlgoID:", result.AlgoID)
+	fmt.Println("==================================================")
+
+	return OrderResult{
+		Success: true,
+		OrderID: strconv.FormatInt(result.AlgoID, 10), // dùng algoId để cancel/query sau
+		Symbol:  symbol,
 	}
 }
 
@@ -817,4 +1247,721 @@ func hmacSha512(message, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(message))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// isFuturesHedgeMode queries account to detect if hedge mode (dualSidePosition) is enabled
+func (ts *TradingService) isFuturesHedgeMode(config *models.TradingConfig) (bool, error) {
+	if config.TradingMode != "futures" {
+		return false, nil
+	}
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/account"
+
+	params := url.Values{}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("account query failed (status %d)", resp.StatusCode)
+	}
+
+	var account struct {
+		DualSidePosition bool `json:"dualSidePosition"`
+	}
+	if err := json.Unmarshal(body, &account); err != nil {
+		return false, err
+	}
+	return account.DualSidePosition, nil
+}
+
+// CancelAllOpenOrders cancels all open orders for a symbol (Futures)
+func (ts *TradingService) CancelAllOpenOrders(config *models.TradingConfig, symbol string) error {
+	if config.TradingMode != "futures" {
+		return nil
+	}
+
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/allOpenOrders"
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("DELETE", fullURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		msg := fmt.Sprintf("cancel all open orders failed (status %d)", resp.StatusCode)
+		if m, ok := errorResp["msg"].(string); ok {
+			msg = fmt.Sprintf("%s: %s", msg, m)
+		}
+		return errors.New(msg)
+	}
+
+	fmt.Printf("🧹 Cancelled all open orders for %s\n", symbol)
+	return nil
+}
+
+func (ts *TradingService) GetOpenAlgoOrders(symbol string) ([]int64, error) {
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/openOrders"
+
+	params := url.Values{}
+	if symbol != "" {
+		params.Set("symbol", symbol)
+	}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+
+	// Debug: Log request details
+	fmt.Printf("\n🔵 GET OPEN TRAILING STOP ORDERS - Request Details:\n")
+	fmt.Printf("   Endpoint: %s\n", endpoint)
+	if symbol != "" {
+		fmt.Printf("   Symbol: %s\n", symbol)
+	} else {
+		fmt.Printf("   Symbol: ALL\n")
+	}
+	fmt.Printf("   Filter Type: TRAILING_STOP_MARKET\n\n")
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		fmt.Printf("   ❌ Request creation failed: %v\n\n", err)
+		return nil, fmt.Errorf("failed to create open orders request: %w", err)
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("   ❌ Request failed: %v\n\n", err)
+		return nil, fmt.Errorf("failed to fetch open orders: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	// Debug: Log response
+	fmt.Printf("🔵 GET OPEN TRAILING STOP ORDERS - Exchange Response:\n")
+	fmt.Printf("   Status Code: %d\n", resp.StatusCode)
+	fmt.Printf("   Response Body: %s\n\n", string(body))
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		errorMsg := fmt.Sprintf("get open orders failed (status %d)", resp.StatusCode)
+		if m, ok := errorResp["msg"].(string); ok {
+			errorMsg = fmt.Sprintf("%s: %s", errorMsg, m)
+		}
+		if code, ok := errorResp["code"].(float64); ok {
+			errorMsg = fmt.Sprintf("%s [Code: %.0f]", errorMsg, code)
+		}
+		fmt.Printf("   ❌ Error: %s\n\n", errorMsg)
+		return nil, errors.New(errorMsg)
+	}
+
+	var orders []map[string]interface{}
+	if err := json.Unmarshal(body, &orders); err != nil {
+		fmt.Printf("   ❌ JSON parsing failed: %v\n\n", err)
+		return nil, fmt.Errorf("failed to parse open orders response: %w", err)
+	}
+
+	// Filter TRAILING_STOP_MARKET orders and extract orderId
+	var algoIds []int64
+	trailingStopCount := 0
+	for _, order := range orders {
+		if orderType, ok := order["type"].(string); ok && orderType == "TRAILING_STOP_MARKET" {
+			// Use orderId field (Binance returns orderId for standard orders)
+			if orderId, ok := order["orderId"].(float64); ok {
+				algoIds = append(algoIds, int64(orderId))
+				trailingStopCount++
+				fmt.Printf("   ✅ Found Trailing Stop Order ID: %.0f\n", orderId)
+			}
+		}
+	}
+
+	fmt.Printf("\n   📊 Summary:\n")
+	fmt.Printf("      Total Orders Returned: %d\n", len(orders))
+	fmt.Printf("      Trailing Stop Orders Found: %d\n", trailingStopCount)
+	fmt.Printf("      Order IDs: %v\n\n", algoIds)
+
+	return algoIds, nil
+}
+
+func (ts *TradingService) CancelAllTrailingStops(symbol string) error {
+	adapter := GetExchangeAdapter("binance", false).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+
+	// ⭐ Bước 1: Lấy open Algo Orders (endpoint đúng)
+	openEndpoint := "/fapi/v1/openAlgoOrders" // ⭐ FIX: openAlgoOrders
+
+	params := url.Values{}
+	if symbol != "" {
+		params.Set("symbol", symbol) // filter theo symbol, khuyến nghị
+	}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	query := params.Encode()
+	signature := ts.sign(query)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, openEndpoint, params.Encode())
+
+	req, _ := http.NewRequest("GET", fullURL, nil)
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	resp, _ := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Get open algo orders failed: %s", string(body))
+	}
+
+	var openOrders []struct {
+		AlgoID    int64  `json:"algoId"`
+		OrderType string `json:"orderType"` // TRAILING_STOP_MARKET, STOP_MARKET, etc.
+		Symbol    string `json:"symbol"`
+	}
+	if err := json.Unmarshal(body, &openOrders); err != nil {
+		return err
+	}
+
+	if len(openOrders) == 0 {
+		fmt.Println("Không có Algo Order (Trailing Stop) nào đang mở trên", symbol)
+		return nil
+	}
+
+	// ⭐ Bước 2: Loop hủy (chỉ hủy TRAILING_STOP_MARKET nếu muốn filter)
+	cancelEndpoint := "/fapi/v1/algoOrder"
+	for _, order := range openOrders {
+		if order.OrderType != "TRAILING_STOP_MARKET" {
+			continue // bỏ qua nếu không phải Trailing Stop (tùy chọn)
+		}
+
+		cancelParams := url.Values{}
+		cancelParams.Set("algoId", strconv.FormatInt(order.AlgoID, 10))
+
+		cancelParams.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+		cancelParams.Set("recvWindow", "5000")
+
+		cancelQuery := cancelParams.Encode()
+		cancelSig := ts.sign(cancelQuery)
+		cancelParams.Set("signature", cancelSig)
+
+		cancelURL := fmt.Sprintf("%s%s?%s", baseURL, cancelEndpoint, cancelParams.Encode())
+
+		cancelReq, _ := http.NewRequest("DELETE", cancelURL, nil)
+		cancelReq.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+		cancelResp, _ := http.DefaultClient.Do(cancelReq)
+		cancelBody, _ := io.ReadAll(cancelResp.Body)
+		cancelResp.Body.Close()
+
+		if cancelResp.StatusCode == 200 {
+			fmt.Printf("✅ Hủy thành công Trailing Stop algoId=%d trên %s\n", order.AlgoID, order.Symbol)
+		} else {
+			fmt.Printf("❌ Hủy thất bại algoId=%d: %s\n", order.AlgoID, string(cancelBody))
+		}
+
+		time.Sleep(100 * time.Millisecond) // tránh rate limit
+	}
+
+	return nil
+}
+
+// CloseFuturesPositionMarket tries to close existing position with MARKET closePosition; falls back to reduceOnly MARKET
+func (ts *TradingService) CloseFuturesPositionMarket(config *models.TradingConfig, symbol string) OrderResult {
+	if config.TradingMode != "futures" {
+		return OrderResult{Success: true}
+	}
+
+	pos, err := ts.getFuturesPositionInfo(config, symbol)
+	if err != nil {
+		return OrderResult{Success: false, Error: fmt.Sprintf("position query failed: %v", err)}
+	}
+	if pos.Quantity == 0 {
+		return OrderResult{Success: false, Error: "no-position"}
+	}
+
+	// Attempt MARKET closePosition (with reduceOnly per doc)
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/order"
+
+	oppositeSide := "SELL"
+	if pos.Side == "SHORT" {
+		oppositeSide = "BUY"
+	}
+
+	hedge, _ := ts.isFuturesHedgeMode(config)
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("side", oppositeSide)
+	if hedge {
+		// include positionSide ONLY in Hedge Mode
+		if pos.Side == "LONG" {
+			params.Set("positionSide", "LONG")
+		} else {
+			params.Set("positionSide", "SHORT")
+		}
+	}
+	params.Set("type", "MARKET")
+	params.Set("closePosition", "true")
+	params.Set("reduceOnly", "true")
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("signature", ts.sign(params.Encode()))
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("POST", fullURL, nil)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == http.StatusOK {
+		fmt.Printf("✅ Closed position via MARKET closePosition for %s\n", symbol)
+		return OrderResult{Success: true}
+	}
+
+	// Fallback: reduceOnly MARKET with quantity (no closePosition)
+	fmt.Printf("⚠️  MARKET closePosition not supported/status %d, fallback to reduceOnly MARKET\n", resp.StatusCode)
+
+	params = url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("side", oppositeSide)
+	params.Set("type", "MARKET")
+	params.Set("quantity", fmt.Sprintf("%.8f", pos.Quantity))
+	params.Set("reduceOnly", "true")
+	if hedge {
+		if pos.Side == "LONG" {
+			params.Set("positionSide", "LONG")
+		} else {
+			params.Set("positionSide", "SHORT")
+		}
+	}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("signature", ts.sign(params.Encode()))
+
+	fullURL = fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err = http.NewRequest("POST", fullURL, nil)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return OrderResult{Success: false, Error: err.Error()}
+	}
+	defer resp.Body.Close()
+	body, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		msg := fmt.Sprintf("close position fallback failed (status %d)", resp.StatusCode)
+		if m, ok := errorResp["msg"].(string); ok {
+			msg = fmt.Sprintf("%s: %s", msg, m)
+		}
+		return OrderResult{Success: false, Error: msg, ErrorDetails: errorResp}
+	}
+
+	fmt.Printf("✅ Closed position via reduceOnly MARKET for %s (qty %.8f)\n", symbol, pos.Quantity)
+	return OrderResult{Success: true}
+}
+
+// futuresPosition holds simplified position info
+type futuresPosition struct {
+	Quantity float64 // absolute position size
+	Side     string  // LONG or SHORT
+}
+
+// getFuturesPositionInfo retrieves current position size/side for the symbol
+func (ts *TradingService) getFuturesPositionInfo(config *models.TradingConfig, symbol string) (futuresPosition, error) {
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v2/positionRisk"
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return futuresPosition{}, err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return futuresPosition{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		return futuresPosition{}, fmt.Errorf("positionRisk failed (status %d)", resp.StatusCode)
+	}
+
+	// Response is an array of positions
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(body, &arr); err != nil {
+		return futuresPosition{}, err
+	}
+	for _, it := range arr {
+		sym, _ := it["symbol"].(string)
+		if sym != symbol {
+			continue
+		}
+		posAmtStr, _ := it["positionAmt"].(string)
+		posAmt, _ := strconv.ParseFloat(posAmtStr, 64)
+		side := "LONG"
+		if posAmt < 0 {
+			side = "SHORT"
+		}
+		return futuresPosition{Quantity: math.Abs(posAmt), Side: side}, nil
+	}
+	return futuresPosition{Quantity: 0, Side: "LONG"}, nil
+}
+
+// getAllFuturesPositions retrieves all futures positions for the account
+func (ts *TradingService) getAllFuturesPositions(config *models.TradingConfig) (map[string]futuresPosition, error) {
+	if config.TradingMode != "futures" {
+		return map[string]futuresPosition{}, nil
+	}
+
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v2/positionRisk"
+
+	params := url.Values{}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("positionRisk failed (status %d)", resp.StatusCode)
+	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(body, &arr); err != nil {
+		return nil, err
+	}
+
+	positions := make(map[string]futuresPosition)
+	for _, it := range arr {
+		sym, _ := it["symbol"].(string)
+		posAmtStr, _ := it["positionAmt"].(string)
+		posAmt, _ := strconv.ParseFloat(posAmtStr, 64)
+		side := "LONG"
+		if posAmt < 0 {
+			side = "SHORT"
+		}
+		positions[sym] = futuresPosition{Quantity: math.Abs(posAmt), Side: side}
+	}
+	return positions, nil
+}
+
+// listFuturesOpenOrderSymbols lists unique symbols that currently have open orders
+func (ts *TradingService) listFuturesOpenOrderSymbols(config *models.TradingConfig) ([]string, error) {
+	if config.TradingMode != "futures" {
+		return []string{}, nil
+	}
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/openOrders"
+
+	params := url.Values{}
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openOrders failed (status %d)", resp.StatusCode)
+	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(body, &arr); err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{})
+	for _, it := range arr {
+		sym, _ := it["symbol"].(string)
+		if sym != "" {
+			set[sym] = struct{}{}
+		}
+	}
+	symbols := make([]string, 0, len(set))
+	for s := range set {
+		symbols = append(symbols, s)
+	}
+	return symbols, nil
+}
+
+// CancelAllOpenOrdersForAllSymbols cancels all open orders across all futures symbols
+func (ts *TradingService) CancelAllOpenOrdersForAllSymbols(config *models.TradingConfig) error {
+	if config.TradingMode != "futures" {
+		return nil
+	}
+	symbols, err := ts.listFuturesOpenOrderSymbols(config)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, sym := range symbols {
+		if e := ts.CancelAllOpenOrders(config, sym); e != nil && firstErr == nil {
+			firstErr = e
+		}
+	}
+	return firstErr
+}
+
+// CloseAllFuturesPositionsMarket closes all non-zero futures positions across all symbols
+func (ts *TradingService) CloseAllFuturesPositionsMarket(config *models.TradingConfig) error {
+	if config.TradingMode != "futures" {
+		return nil
+	}
+	positions, err := ts.getAllFuturesPositions(config)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for sym, pos := range positions {
+		if pos.Quantity == 0 {
+			continue
+		}
+		res := ts.CloseFuturesPositionMarket(config, sym)
+		if !res.Success && res.Error != "no-position" && firstErr == nil {
+			firstErr = errors.New(res.Error)
+		}
+	}
+	return firstErr
+}
+
+// SetMarginType sets margin mode for a symbol (ISOLATED or CROSSED)
+// Only call once per symbol unless changing margin type
+func (ts *TradingService) SetMarginType(config *models.TradingConfig, symbol, marginType string) error {
+	if config.TradingMode != "futures" {
+		return nil
+	}
+
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/marginType"
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("marginType", strings.ToUpper(marginType)) // ISOLATED or CROSSED
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("POST", fullURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create margin type request: %w", err)
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to set margin type: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		errorMsg := fmt.Sprintf("set margin type failed (status %d)", resp.StatusCode)
+		if m, ok := errorResp["msg"].(string); ok {
+			errorMsg = fmt.Sprintf("%s: %s", errorMsg, m)
+		}
+		if code, ok := errorResp["code"].(float64); ok {
+			errorMsg = fmt.Sprintf("%s [Code: %.0f]", errorMsg, code)
+		}
+		// Code -4046 means margin type already set, which is fine
+		if code, ok := errorResp["code"].(float64); ok && code == -4046 {
+			fmt.Printf("⚠️  Margin type already set for %s (code -4046)\n", symbol)
+			return nil // Not an error
+		}
+		return errors.New(errorMsg)
+	}
+
+	fmt.Printf("✅ Set margin type to %s for %s\n", marginType, symbol)
+	return nil
+}
+
+// SetLeverage sets leverage for a symbol (1-125)
+// Only call once per symbol unless changing leverage
+func (ts *TradingService) SetLeverage(config *models.TradingConfig, symbol string, leverage int) error {
+	if config.TradingMode != "futures" {
+		return nil
+	}
+
+	if leverage < 1 || leverage > 125 {
+		return fmt.Errorf("leverage must be between 1 and 125, got %d", leverage)
+	}
+
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+	baseURL := adapter.FuturesAPIURL
+	endpoint := "/fapi/v1/leverage"
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("leverage", strconv.Itoa(leverage))
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	// Sign BEFORE adding signature to the URL
+	queryString := params.Encode()
+	signature := ts.sign(queryString)
+	params.Set("signature", signature)
+
+	fullURL := fmt.Sprintf("%s%s?%s", baseURL, endpoint, params.Encode())
+	req, err := http.NewRequest("POST", fullURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create leverage request: %w", err)
+	}
+	req.Header.Set("X-MBX-APIKEY", ts.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to set leverage: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		_ = json.Unmarshal(body, &errorResp)
+		errorMsg := fmt.Sprintf("set leverage failed (status %d)", resp.StatusCode)
+		if m, ok := errorResp["msg"].(string); ok {
+			errorMsg = fmt.Sprintf("%s: %s", errorMsg, m)
+		}
+		if code, ok := errorResp["code"].(float64); ok {
+			errorMsg = fmt.Sprintf("%s [Code: %.0f]", errorMsg, code)
+		}
+		return errors.New(errorMsg)
+	}
+
+	fmt.Printf("✅ Set leverage to %d for %s\n", leverage, symbol)
+	return nil
 }

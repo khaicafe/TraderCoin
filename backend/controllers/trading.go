@@ -143,13 +143,19 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 		orderResult := tradingService.PlaceOrder(&config, request.Side, orderType, symbol, amount, price)
 
 		if !orderResult.Success {
-			errorMsg := fmt.Sprintf("Failed to place order: %s", orderResult.Error)
-			log.Printf("Order placement failed: %v", orderResult.ErrorDetails)
+			errorMsg := orderResult.Error
+			if errorMsg == "" {
+				errorMsg = "Failed to place order"
+			}
 
-			// Do not create order record when placement fails
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   errorMsg,
-				"details": orderResult.ErrorDetails,
+			log.Printf("Order placement failed: %s", errorMsg)
+			if orderResult.ErrorDetails != nil {
+				log.Printf("Error details: %v", orderResult.ErrorDetails)
+			}
+
+			// Return user-friendly error message
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": errorMsg,
 			})
 			return
 		}

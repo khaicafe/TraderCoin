@@ -354,6 +354,9 @@ CfJsnKKOqXKzQBXca8Wii6rBW9sCSmSaK9Skn0JGG6ooAdaUSSMgMGbudTa6dnwz
 Secret Key
 bqQBmHfL0qKjUd8Vj7Y1GpLfA6RVMNq8eoLtHO0Fu6PLwNv4n2X19uzWaJsBbJH9
 
+mwShmmfpqJcXZ3W1TWKWoiIuORmbpF1YCPz523SPTLIJEyyppMgxlWVg0Sy2YdYb
+vKUcGXs3VkJlx7UwuUaLlPyWZhYkgE7hVIIpSMv8uoBSndsPb2LnbJMJh63XQa7F
+
 webhook
 curl -X POST http://localhost:8080/api/v1/signals/webhook/74c7c7f4ce33 \
  -H "Content-Type: application/json" \

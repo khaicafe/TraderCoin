@@ -71,7 +71,7 @@ func main() {
 	// Initialize Order Monitor Service (background worker)
 	orderMonitor := services.NewOrderMonitorService(db, wsHub)
 	svcs.OrderMonitor = orderMonitor
-	orderMonitor.Start() // Start background monitoring
+	// orderMonitor.Start() // Start background monitoring
 	log.Println("✅ Order Monitor Service started (checking every 5 seconds)")
 
 	// Setup Gin router

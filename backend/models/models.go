@@ -44,23 +44,24 @@ type ExchangeKey struct {
 }
 
 type TradingConfig struct {
-	ID                uint           `gorm:"primaryKey" json:"id"`
-	UserID            uint           `gorm:"not null;index" json:"user_id"`
-	Name              string         `gorm:"size:100" json:"name"` // Bot name
-	Exchange          string         `gorm:"not null;size:50" json:"exchange"`
-	Symbol            string         `gorm:"not null;size:50" json:"symbol"`
-	Amount            float64        `gorm:"type:decimal(10,2)" json:"amount"`
-	TradingMode       string         `gorm:"size:20;default:'spot'" json:"trading_mode"` // spot, futures, margin
-	Leverage          int            `gorm:"default:1" json:"leverage"`                  // Leverage for futures/margin trading (1-125)
-	APIKey            string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
-	APISecret         string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
-	StopLossPercent   float64        `gorm:"type:decimal(10,2)" json:"stop_loss_percent"`
-	TakeProfitPercent float64        `gorm:"type:decimal(10,2)" json:"take_profit_percent"`
-	IsDefault         bool           `gorm:"default:false" json:"is_default"` // Only one default bot per user
-	IsActive          bool           `gorm:"default:true" json:"is_active"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                  uint           `gorm:"primaryKey" json:"id"`
+	UserID              uint           `gorm:"not null;index" json:"user_id"`
+	Name                string         `gorm:"size:100" json:"name"` // Bot name
+	Exchange            string         `gorm:"not null;size:50" json:"exchange"`
+	Symbol              string         `gorm:"not null;size:50" json:"symbol"`
+	Amount              float64        `gorm:"type:decimal(10,2)" json:"amount"`
+	TradingMode         string         `gorm:"size:20;default:'spot'" json:"trading_mode"` // spot, futures, margin
+	Leverage            int            `gorm:"default:1" json:"leverage"`                  // Leverage for futures/margin trading (1-125)
+	APIKey              string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
+	APISecret           string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
+	StopLossPercent     float64        `gorm:"type:decimal(10,2)" json:"stop_loss_percent"`
+	TakeProfitPercent   float64        `gorm:"type:decimal(10,2)" json:"take_profit_percent"`
+	TrailingStopPercent float64        `gorm:"type:decimal(10,2);default:0" json:"trailing_stop_percent"` // Trailing stop for futures
+	IsDefault           bool           `gorm:"default:false" json:"is_default"`                           // Only one default bot per user
+	IsActive            bool           `gorm:"default:true" json:"is_active"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	DeletedAt           gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relationships
 	User User `gorm:"foreignKey:UserID" json:"-"`
