@@ -391,237 +391,207 @@ export default function SignalsPage() {
             config.trading_mode?.toLowerCase() === 'future';
 
           return (
-            <div className="mb-6 space-y-3">
-              <h3 className="font-semibold text-gray-900">
-                📋 Thông tin Bot Config đang chọn
-              </h3>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="mb-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
                 {/* Card 1: Bot Config Info */}
-                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-indigo-900 flex items-center gap-2 text-sm">
+                <div className="p-2 bg-indigo-50 border border-indigo-200 rounded">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h4 className="font-semibold text-indigo-900 text-[11px] flex items-center gap-1">
                       <span>⚙️</span>
-                      <span>Bot Config Info</span>
+                      <span>Config</span>
                     </h4>
                     {config.is_default && (
-                      <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                      <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">
                         Default
                       </span>
                     )}
                   </div>
 
-                  <div className="bg-white p-3 rounded-lg text-xs space-y-2">
-                    {config.name && (
-                      <p>
-                        <strong>Name:</strong> {config.name}
-                      </p>
-                    )}
-                    <p>
-                      <strong>Exchange:</strong> {config.exchange.toUpperCase()}
-                    </p>
-                    <p>
-                      <strong>Symbol:</strong> {config.symbol}
-                    </p>
-                    <p>
-                      <strong>Trading Mode:</strong>{' '}
+                  <div className="space-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Exchange:</span>
+                      <span className="font-medium">
+                        {config.exchange.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Symbol:</span>
+                      <span className="font-medium">{config.symbol}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Mode:</span>
                       <span
-                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                        className={`px-1 py-0.5 rounded text-[9px] font-semibold ${
                           isFutures
                             ? 'bg-orange-100 text-orange-800'
                             : 'bg-blue-100 text-blue-800'
                         }`}>
                         {config.trading_mode || 'spot'}
                       </span>
-                    </p>
+                    </div>
                     {config.amount && config.amount > 0 && (
-                      <p>
-                        <strong>Default Amount:</strong> {config.amount}
-                      </p>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Amount:</span>
+                        <span className="font-medium">{config.amount}</span>
+                      </div>
                     )}
-                    <div className="pt-2 border-t border-indigo-200">
-                      <p>
-                        <strong>Stop Loss:</strong>{' '}
-                        <span className="text-red-600 font-semibold">
-                          {config.stop_loss_percent}%
+                    <div className="pt-1 border-t border-indigo-200 space-y-0.5">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">SL/TP:</span>
+                        <span>
+                          <span className="text-red-600 font-semibold">
+                            {config.stop_loss_percent}%
+                          </span>
+                          <span className="text-gray-400 mx-0.5">/</span>
+                          <span className="text-green-600 font-semibold">
+                            {config.take_profit_percent}%
+                          </span>
                         </span>
-                      </p>
-                      <p>
-                        <strong>Take Profit:</strong>{' '}
-                        <span className="text-green-600 font-semibold">
-                          {config.take_profit_percent}%
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-gray-500">R:R</span>
+                        <span className="text-gray-700">
+                          {(
+                            config.take_profit_percent /
+                            config.stop_loss_percent
+                          ).toFixed(1)}
+                          :1
                         </span>
-                      </p>
-                      <p className="text-gray-500 text-[10px] mt-1">
-                        Risk/Reward:{' '}
-                        {(
-                          config.take_profit_percent / config.stop_loss_percent
-                        ).toFixed(2)}
-                        :1
-                      </p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Card 2: SPOT Trading Info */}
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
-                      <span>📊</span>
-                      <span>SPOT Trading</span>
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h4 className="font-semibold text-blue-900 text-[11px] flex items-center gap-1">
+                      <span>�</span>
+                      <span>SPOT</span>
                     </h4>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      No Leverage
+                    <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
+                      1x
                     </span>
                   </div>
 
                   {loadingAccount ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                     </div>
                   ) : accountInfo?.spot ? (
-                    <>
-                      {/* Spot Summary */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Tổng tài sản</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            ${accountInfo.spot.total_balance.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Khả dụng</p>
-                          <p className="text-lg font-bold text-green-600">
-                            ${accountInfo.spot.available_balance.toFixed(2)}
-                          </p>
-                        </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tổng:</span>
+                        <span className="font-bold text-gray-900">
+                          ${accountInfo.spot.total_balance.toFixed(2)}
+                        </span>
                       </div>
-
-                      {/* Spot Balances */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Khả dụng:</span>
+                        <span className="font-bold text-green-600">
+                          ${accountInfo.spot.available_balance.toFixed(2)}
+                        </span>
+                      </div>
                       {accountInfo.spot.balances &&
                         accountInfo.spot.balances.length > 0 && (
-                          <div className="bg-white p-3 rounded-lg">
-                            <p className="text-xs text-gray-500 mb-2">
-                              Tài sản chi tiết:
+                          <div className="pt-1 border-t border-blue-200">
+                            <p className="text-gray-500 mb-1 text-[9px]">
+                              Top assets:
                             </p>
-                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                            <div className="space-y-0.5 max-h-16 overflow-y-auto">
                               {accountInfo.spot.balances
                                 .filter((b) => b.total > 0.00001)
                                 .sort((a, b) => b.total - a.total)
+                                .slice(0, 3)
                                 .map((balance, idx) => (
                                   <div
                                     key={idx}
-                                    className="flex justify-between text-xs">
+                                    className="flex justify-between text-[10px]">
                                     <span className="font-medium text-blue-700">
                                       {balance.asset}
                                     </span>
-                                    <div className="text-right">
-                                      <span className="text-gray-900 font-semibold">
-                                        {balance.total.toFixed(8)}
-                                      </span>
-                                      {balance.locked > 0 && (
-                                        <span className="text-orange-600 ml-2">
-                                          (🔒 {balance.locked.toFixed(8)})
-                                        </span>
-                                      )}
-                                    </div>
+                                    <span className="text-gray-900">
+                                      {balance.total.toFixed(4)}
+                                    </span>
                                   </div>
                                 ))}
                             </div>
                           </div>
                         )}
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      {/* No data - show $0.00 */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Tổng tài sản</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            $0.00
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Khả dụng</p>
-                          <p className="text-lg font-bold text-green-600">
-                            $0.00
-                          </p>
-                        </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tổng:</span>
+                        <span className="font-bold text-gray-900">$0.00</span>
                       </div>
-
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">
-                          Tài sản chi tiết:
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Khả dụng:</span>
+                        <span className="font-bold text-green-600">$0.00</span>
+                      </div>
+                      <div className="pt-1 border-t border-blue-200">
+                        <p className="text-gray-400 italic text-center text-[9px] py-1">
+                          Chưa có dữ liệu
                         </p>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          <div className="text-xs text-gray-400 italic text-center py-2">
-                            Chưa có dữ liệu
-                          </div>
-                        </div>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 
                 {/* Card 3: FUTURES Trading Info */}
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                <div className="p-2 bg-purple-50 border border-purple-200 rounded">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h4 className="font-semibold text-purple-900 text-[11px] flex items-center gap-1">
                       <span>🚀</span>
-                      <span>FUTURES Trading</span>
+                      <span>FUTURES</span>
                     </h4>
-                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                      Up to 125x
+                    <span className="text-[9px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded">
+                      125x
                     </span>
                   </div>
 
                   {loadingAccount ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
                     </div>
                   ) : accountInfo?.futures ? (
-                    <>
-                      {/* Futures Summary */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Tổng tài sản</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            ${accountInfo.futures.total_balance.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Khả dụng</p>
-                          <p className="text-lg font-bold text-green-600">
-                            ${accountInfo.futures.available_balance.toFixed(2)}
-                          </p>
-                        </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tổng:</span>
+                        <span className="font-bold text-gray-900">
+                          ${accountInfo.futures.total_balance.toFixed(2)}
+                        </span>
                       </div>
-
-                      {/* Futures Balances */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Khả dụng:</span>
+                        <span className="font-bold text-green-600">
+                          ${accountInfo.futures.available_balance.toFixed(2)}
+                        </span>
+                      </div>
                       {accountInfo.futures.balances &&
                         accountInfo.futures.balances.length > 0 && (
-                          <div className="bg-white p-3 rounded-lg">
-                            <p className="text-xs text-gray-500 mb-2">
+                          <div className="pt-1 border-t border-purple-200">
+                            <p className="text-gray-500 mb-1 text-[9px]">
                               Tài sản chi tiết:
                             </p>
-                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                            <div className="space-y-0.5 max-h-20 overflow-y-auto">
                               {accountInfo.futures.balances
                                 .filter((b) => b.total > 0.00001)
                                 .sort((a, b) => b.total - a.total)
                                 .map((balance, idx) => (
                                   <div
                                     key={idx}
-                                    className="flex justify-between text-xs">
+                                    className="flex justify-between text-[10px]">
                                     <span className="font-medium text-purple-700">
                                       {balance.asset}
                                     </span>
                                     <div className="text-right">
                                       <span className="text-gray-900 font-semibold">
-                                        {balance.total.toFixed(8)}
+                                        {balance.total.toFixed(6)}
                                       </span>
                                       {balance.locked > 0 && (
-                                        <span className="text-orange-600 ml-2">
-                                          (🔒 {balance.locked.toFixed(8)})
+                                        <span className="text-orange-600 ml-1 text-[9px]">
+                                          (🔒{balance.locked.toFixed(6)})
                                         </span>
                                       )}
                                     </div>
@@ -630,36 +600,23 @@ export default function SignalsPage() {
                             </div>
                           </div>
                         )}
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      {/* No data - show $0.00 */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Tổng tài sản</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            $0.00
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg">
-                          <p className="text-xs text-gray-500">Khả dụng</p>
-                          <p className="text-lg font-bold text-green-600">
-                            $0.00
-                          </p>
-                        </div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tổng:</span>
+                        <span className="font-bold text-gray-900">$0.00</span>
                       </div>
-
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">
-                          Tài sản chi tiết:
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Khả dụng:</span>
+                        <span className="font-bold text-green-600">$0.00</span>
+                      </div>
+                      <div className="pt-1 border-t border-purple-200">
+                        <p className="text-gray-400 italic text-center text-[9px] py-1">
+                          Chưa có dữ liệu
                         </p>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          <div className="text-xs text-gray-400 italic text-center py-2">
-                            Chưa có dữ liệu
-                          </div>
-                        </div>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>

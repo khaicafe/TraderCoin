@@ -190,141 +190,212 @@ export default function TradingPage() {
         Đặt Lệnh Trading
       </h1>
 
-      {/* Account Info Cards - Split Spot and Futures */}
+      {/* 3-Card Quick Info */}
       {selectedConfig && (
-        <div className="mt-4 space-y-3 pb-6">
-          <h3 className="font-semibold text-gray-900 flex items-center justify-between">
-            <span>💰 Thông tin tài khoản trên sàn</span>
-            {loadingAccount && (
-              <span className="text-xs text-blue-600">Đang tải...</span>
-            )}
+        <div className="mb-6">
+          <h3 className="font-semibold text-gray-900 mb-2 text-sm">
+            ⚡ Thông tin nhanh
           </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {/* Card 1: Bot Config Info */}
+            <div className="p-2 bg-indigo-50 border border-indigo-200 rounded">
+              <div className="flex items-center justify-between mb-1.5">
+                <h4 className="font-semibold text-indigo-900 text-[11px] flex items-center gap-1">
+                  <span>⚙️</span>
+                  <span>Config</span>
+                </h4>
+                {selectedConfig.is_default && (
+                  <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">
+                    Default
+                  </span>
+                )}
+              </div>
 
-          {loadingAccount ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          ) : accountInfo ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {/* Spot Account Card */}
-              {accountInfo.spot && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
-                      <span>📊</span>
-                      <span>SPOT Trading</span>
-                    </h4>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      No Leverage
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Exchange:</span>
+                  <span className="font-medium">
+                    {selectedConfig.exchange.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Symbol:</span>
+                  <span className="font-medium">{selectedConfig.symbol}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Mode:</span>
+                  <span
+                    className={`px-1 py-0.5 rounded text-[9px] font-semibold ${
+                      selectedConfig.trading_mode === 'futures'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                    {selectedConfig.trading_mode || 'spot'}
+                  </span>
+                </div>
+                {selectedConfig.amount && selectedConfig.amount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-medium">{selectedConfig.amount}</span>
+                  </div>
+                )}
+                <div className="pt-1 border-t border-indigo-200 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">SL/TP:</span>
+                    <span>
+                      <span className="text-red-600 font-semibold">
+                        {selectedConfig.stop_loss_percent}%
+                      </span>
+                      <span className="text-gray-400 mx-0.5">/</span>
+                      <span className="text-green-600 font-semibold">
+                        {selectedConfig.take_profit_percent}%
+                      </span>
                     </span>
                   </div>
-
-                  {/* Spot Summary */}
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500">Tổng tài sản</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        ${accountInfo.spot.total_balance.toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500">Khả dụng</p>
-                      <p className="text-lg font-bold text-green-600">
-                        ${accountInfo.spot.available_balance.toFixed(2)}
-                      </p>
-                    </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-gray-500">R:R</span>
+                    <span className="text-gray-700">
+                      {(
+                        selectedConfig.take_profit_percent /
+                        selectedConfig.stop_loss_percent
+                      ).toFixed(1)}
+                      :1
+                    </span>
                   </div>
+                </div>
+              </div>
+            </div>
 
-                  {/* Spot Balances */}
+            {/* Card 2: SPOT Trading Info */}
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+              <div className="flex items-center justify-between mb-1.5">
+                <h4 className="font-semibold text-blue-900 text-[11px] flex items-center gap-1">
+                  <span>📊</span>
+                  <span>SPOT</span>
+                </h4>
+                <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded">
+                  1x
+                </span>
+              </div>
+
+              {loadingAccount ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                </div>
+              ) : accountInfo?.spot ? (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tổng:</span>
+                    <span className="font-bold text-gray-900">
+                      ${accountInfo.spot.total_balance.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Khả dụng:</span>
+                    <span className="font-bold text-green-600">
+                      ${accountInfo.spot.available_balance.toFixed(2)}
+                    </span>
+                  </div>
                   {accountInfo.spot.balances &&
                     accountInfo.spot.balances.length > 0 && (
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">
-                          Tài sản chi tiết:
+                      <div className="pt-1 border-t border-blue-200">
+                        <p className="text-gray-500 mb-1 text-[9px]">
+                          Top assets:
                         </p>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                        <div className="space-y-0.5 max-h-16 overflow-y-auto">
                           {accountInfo.spot.balances
                             .filter((b) => b.total > 0.00001)
                             .sort((a, b) => b.total - a.total)
+                            .slice(0, 3)
                             .map((balance, idx) => (
                               <div
                                 key={idx}
-                                className="flex justify-between text-xs">
+                                className="flex justify-between text-[10px]">
                                 <span className="font-medium text-blue-700">
                                   {balance.asset}
                                 </span>
-                                <div className="text-right">
-                                  <span className="text-gray-900 font-semibold">
-                                    {balance.total.toFixed(8)}
-                                  </span>
-                                  {balance.locked > 0 && (
-                                    <span className="text-orange-600 ml-2">
-                                      (🔒 {balance.locked.toFixed(8)})
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="text-gray-900">
+                                  {balance.total.toFixed(4)}
+                                </span>
                               </div>
                             ))}
                         </div>
                       </div>
                     )}
                 </div>
+              ) : (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tổng:</span>
+                    <span className="font-bold text-gray-900">$0.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Khả dụng:</span>
+                    <span className="font-bold text-green-600">$0.00</span>
+                  </div>
+                  <div className="pt-1 border-t border-blue-200">
+                    <p className="text-gray-400 italic text-center text-[9px] py-1">
+                      Chưa có dữ liệu
+                    </p>
+                  </div>
+                </div>
               )}
+            </div>
 
-              {/* Futures Account Card */}
-              {accountInfo.futures && (
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-purple-900 flex items-center gap-2">
-                      <span>🚀</span>
-                      <span>FUTURES Trading</span>
-                    </h4>
-                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                      Up to 125x
+            {/* Card 3: FUTURES Trading Info */}
+            <div className="p-2 bg-purple-50 border border-purple-200 rounded">
+              <div className="flex items-center justify-between mb-1.5">
+                <h4 className="font-semibold text-purple-900 text-[11px] flex items-center gap-1">
+                  <span>🚀</span>
+                  <span>FUTURES</span>
+                </h4>
+                <span className="text-[9px] bg-purple-100 text-purple-700 px-1 py-0.5 rounded">
+                  125x
+                </span>
+              </div>
+
+              {loadingAccount ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                </div>
+              ) : accountInfo?.futures ? (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tổng:</span>
+                    <span className="font-bold text-gray-900">
+                      ${accountInfo.futures.total_balance.toFixed(2)}
                     </span>
                   </div>
-
-                  {/* Futures Summary */}
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500">Tổng tài sản</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        ${accountInfo.futures.total_balance.toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="bg-white p-3 rounded-lg">
-                      <p className="text-xs text-gray-500">Khả dụng</p>
-                      <p className="text-lg font-bold text-green-600">
-                        ${accountInfo.futures.available_balance.toFixed(2)}
-                      </p>
-                    </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Khả dụng:</span>
+                    <span className="font-bold text-green-600">
+                      ${accountInfo.futures.available_balance.toFixed(2)}
+                    </span>
                   </div>
-
-                  {/* Futures Balances */}
                   {accountInfo.futures.balances &&
                     accountInfo.futures.balances.length > 0 && (
-                      <div className="bg-white p-3 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-2">
+                      <div className="pt-1 border-t border-purple-200">
+                        <p className="text-gray-500 mb-1 text-[9px]">
                           Tài sản chi tiết:
                         </p>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                        <div className="space-y-0.5 max-h-20 overflow-y-auto">
                           {accountInfo.futures.balances
                             .filter((b) => b.total > 0.00001)
                             .sort((a, b) => b.total - a.total)
                             .map((balance, idx) => (
                               <div
                                 key={idx}
-                                className="flex justify-between text-xs">
+                                className="flex justify-between text-[10px]">
                                 <span className="font-medium text-purple-700">
                                   {balance.asset}
                                 </span>
                                 <div className="text-right">
                                   <span className="text-gray-900 font-semibold">
-                                    {balance.total.toFixed(8)}
+                                    {balance.total.toFixed(6)}
                                   </span>
                                   {balance.locked > 0 && (
-                                    <span className="text-orange-600 ml-2">
-                                      (🔒 {balance.locked.toFixed(8)})
+                                    <span className="text-orange-600 ml-1 text-[9px]">
+                                      (🔒{balance.locked.toFixed(6)})
                                     </span>
                                   )}
                                 </div>
@@ -334,55 +405,27 @@ export default function TradingPage() {
                       </div>
                     )}
                 </div>
-              )}
-
-              {/* No Account Data */}
-              {!accountInfo.spot && !accountInfo.futures && (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-                  <p className="text-sm text-gray-500 italic">
-                    Không có dữ liệu tài khoản
-                  </p>
+              ) : (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tổng:</span>
+                    <span className="font-bold text-gray-900">$0.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Khả dụng:</span>
+                    <span className="font-bold text-green-600">$0.00</span>
+                  </div>
+                  <div className="pt-1 border-t border-purple-200">
+                    <p className="text-gray-400 italic text-center text-[9px] py-1">
+                      Chưa có dữ liệu
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-              <p className="text-sm text-gray-500 italic">
-                Không thể tải thông tin tài khoản
-              </p>
-            </div>
-          )}
+          </div>
         </div>
       )}
-
-      {/* Warning Alert
-      {showWarning && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <span className="text-yellow-600 text-sm">⚠️</span>
-          <div className="flex-1">
-            <p className="text-sm text-yellow-800">
-              <strong>Cảnh báo:</strong> Đây là lệnh THẬT trên SÀN GIAO DỊCH!
-              {botConfigs.length === 0 && ' Không có bot config nào.'}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowWarning(false)}
-            className="text-yellow-600 hover:text-yellow-800">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      )} */}
 
       {/* Error Alert */}
       {error && (
