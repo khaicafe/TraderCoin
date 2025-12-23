@@ -82,17 +82,6 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		// Check if bot is paused
-		// Note: BotStatus is not in the current models, skip this check for now
-		// var botStatus models.BotStatus
-		// err = services.DB.Where("bot_config_id = ?", config.ID).First(&botStatus).Error
-		// if err == nil && botStatus.IsPaused {
-		// 	c.JSON(http.StatusBadRequest, gin.H{
-		// 		"error": "Bot is paused",
-		// 	})
-		// 	return
-		// }
-
 		// Check API credentials
 		if config.APIKey == "" || config.APISecret == "" {
 			c.JSON(http.StatusBadRequest, gin.H{

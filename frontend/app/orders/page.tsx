@@ -106,6 +106,20 @@ export default function OrdersPage() {
       const data = await getOrderHistory(params);
       setOrders(data);
       console.log('Fetched orders:', data);
+      console.log(
+        '⏱️  Note: Position data will be populated via WebSocket updates (every 5s)',
+      );
+
+      // Debug: Check which orders have position data
+      const ordersWithPosition = data.filter((o) => o.position);
+      console.log(
+        `📊 Orders with position data: ${ordersWithPosition.length}/${data.length}`,
+      );
+      ordersWithPosition.forEach((o) => {
+        console.log(
+          `  Order ${o.id}: position_amt=${o.position?.position_amt}`,
+        );
+      });
 
       // Calculate stats
       const total = data.length;
@@ -190,10 +204,19 @@ export default function OrdersPage() {
             symbol: data.symbol,
             status: data.status,
             has_position: !!data.position,
+            position_data: data.position,
           });
 
           // Update specific order in state with position data
           setOrders((prevOrders) => {
+            console.log(
+              `🔍 Looking for order ${data.order_id} in ${prevOrders.length} orders`,
+            );
+            console.log(
+              '  Available order IDs:',
+              prevOrders.map((o) => o.id),
+            );
+
             const orderIndex = prevOrders.findIndex(
               (o) => o.id === data.order_id,
             );
@@ -216,24 +239,28 @@ export default function OrdersPage() {
               status: data.status,
               position: data.position
                 ? {
-                    position_amt: data.position.position_amt?.toString(),
-                    entry_price: data.position.entry_price?.toString(),
-                    mark_price: data.position.mark_price?.toString(),
-                    liquidation_price:
-                      data.position.liquidation_price?.toString(),
-                    unrealized_profit:
-                      data.position.unrealized_profit?.toString(),
-                    pnl_percent: data.position.pnl_percent?.toString(),
-                    leverage: data.position.leverage?.toString(),
-                    margin_type: data.position.margin_type,
-                    isolated_margin: data.position.isolated_margin?.toString(),
-                    position_side: data.position.position_side,
+                    position_amt: String(data.position.position_amt || '0'),
+                    entry_price: String(data.position.entry_price || '0'),
+                    mark_price: String(data.position.mark_price || '0'),
+                    liquidation_price: String(
+                      data.position.liquidation_price || '0',
+                    ),
+                    unrealized_profit: String(
+                      data.position.unrealized_profit || '0',
+                    ),
+                    pnl_percent: String(data.position.pnl_percent || '0'),
+                    leverage: String(data.position.leverage || '0'),
+                    margin_type: data.position.margin_type || '',
+                    isolated_margin: String(
+                      data.position.isolated_margin || '0',
+                    ),
+                    position_side: data.position.position_side || '',
                   }
                 : undefined,
               // Update PnL from position if available
               ...(data.position && {
-                pnl: data.position.unrealized_profit || 0,
-                pnl_percent: data.position.pnl_percent || 0,
+                pnl: Number(data.position.unrealized_profit) || 0,
+                pnl_percent: Number(data.position.pnl_percent) || 0,
               }),
             };
 
@@ -242,6 +269,7 @@ export default function OrdersPage() {
                 data.position ? ', position data included' : ''
               }`,
             );
+            console.log('Updated order object:', updatedOrders[orderIndex]);
             return updatedOrders;
           });
         }
@@ -605,10 +633,7 @@ export default function OrdersPage() {
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    PnL
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    ROI
+                    PnL / ROI
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Created
@@ -842,49 +867,48 @@ export default function OrdersPage() {
                       </td>
                       <td className="px-6 py-4 text-sm">
                         {(() => {
-                          // Ưu tiên dùng position unrealized_profit nếu có
+                          // Ưu tiên dùng position data nếu có
                           const positionPnl = order.position?.unrealized_profit
                             ? parseFloat(order.position.unrealized_profit)
                             : null;
-                          const displayPnl =
-                            positionPnl !== null ? positionPnl : pnl;
-
-                          return displayPnl !== null ? (
-                            <span
-                              className={`font-semibold ${
-                                displayPnl >= 0
-                                  ? 'text-green-600'
-                                  : 'text-red-600'
-                              } ${isOpen ? 'animate-pulse' : ''}`}>
-                              {displayPnl >= 0 ? '+' : ''}$
-                              {displayPnl.toFixed(2)}
-                            </span>
-                          ) : (
-                            '-'
-                          );
-                        })()}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {(() => {
-                          // Ưu tiên dùng position pnl_percent nếu có
                           const positionRoi = order.position?.pnl_percent
                             ? parseFloat(order.position.pnl_percent)
                             : null;
+
+                          const displayPnl =
+                            positionPnl !== null ? positionPnl : pnl;
                           const displayRoi =
                             positionRoi !== null ? positionRoi : roi;
 
-                          return displayRoi !== null ? (
-                            <span
-                              className={`font-semibold ${
-                                displayRoi >= 0
-                                  ? 'text-green-600'
-                                  : 'text-red-600'
-                              } ${isOpen ? 'animate-pulse' : ''}`}>
-                              {displayRoi >= 0 ? '+' : ''}
-                              {displayRoi.toFixed(2)}%
-                            </span>
-                          ) : (
-                            '-'
+                          if (displayPnl === null && displayRoi === null) {
+                            return <span className="text-gray-400">-</span>;
+                          }
+
+                          return (
+                            <div className="flex flex-col">
+                              {displayPnl !== null && (
+                                <span
+                                  className={`font-semibold text-base ${
+                                    displayPnl >= 0
+                                      ? 'text-green-600'
+                                      : 'text-red-600'
+                                  } ${isOpen ? 'animate-pulse' : ''}`}>
+                                  {displayPnl >= 0 ? '+' : ''}$
+                                  {displayPnl.toFixed(2)}
+                                </span>
+                              )}
+                              {displayRoi !== null && (
+                                <span
+                                  className={`text-xs font-medium ${
+                                    displayRoi >= 0
+                                      ? 'text-green-500'
+                                      : 'text-red-500'
+                                  }`}>
+                                  {displayRoi >= 0 ? '+' : ''}
+                                  {displayRoi.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </td>

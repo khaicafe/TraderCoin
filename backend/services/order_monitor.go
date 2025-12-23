@@ -174,6 +174,28 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 					log.Printf("      PnL: %.2f USDT (%.2f%%) | Margin: %.2f USDT | Leverage: %dx",
 						position.UnrealizedProfit, position.PnlPercent, position.IsolatedMargin, position.Leverage)
 
+					// Update database with position info (entry price, leverage, PnL)
+					updateFields := make(map[string]interface{})
+					if order.FilledPrice == 0 && position.EntryPrice > 0 {
+						order.FilledPrice = position.EntryPrice
+						order.Price = position.EntryPrice // Also set Price if not set
+						updateFields["filled_price"] = position.EntryPrice
+						updateFields["price"] = position.EntryPrice
+						log.Printf("   📝 Updated FilledPrice from position: %.2f", position.EntryPrice)
+					}
+					if order.Leverage == 0 && position.Leverage > 0 {
+						order.Leverage = position.Leverage
+						updateFields["leverage"] = position.Leverage
+						log.Printf("   📝 Updated Leverage from position: %dx", position.Leverage)
+					}
+					if len(updateFields) > 0 {
+						if err := oms.DB.Model(&models.Order{}).Where("id = ?", order.ID).Updates(updateFields).Error; err != nil {
+							log.Printf("⚠️  Order %d: Failed to update position info: %v", order.ID, err)
+						} else {
+							log.Printf("✅ Order %d: Updated FilledPrice and Leverage in database", order.ID)
+						}
+					}
+
 					// Send WebSocket update with position info (even if status not changed)
 					oms.notifyOrderUpdate(order.UserID, order.ID, &order, positionInfo)
 				} else {

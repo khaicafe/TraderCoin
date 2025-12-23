@@ -511,13 +511,6 @@ func (hub *WebSocketHub) BroadcastToUser(userID uint, message WebSocketMessage) 
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
 
-	// Get all sessions for this user
-	sessions, exists := hub.UserSessions[userID]
-	if !exists || len(sessions) == 0 {
-		log.Printf("📭 No active sessions for user %d", userID)
-		return
-	}
-
 	messageData, err := json.Marshal(message)
 	if err != nil {
 		log.Printf("❌ Failed to marshal WebSocket message: %v", err)
@@ -525,26 +518,51 @@ func (hub *WebSocketHub) BroadcastToUser(userID uint, message WebSocketMessage) 
 	}
 
 	sentCount := 0
+	userCount := 0
 
-	// Send to all exchange connections for this user
+	// 1. Send to GLOBAL user tabs (not tied to exchange keys)
+	if globalTabs, ok := hub.GlobalUserTabs[userID]; ok && len(globalTabs) > 0 {
+		globalSent := 0
+		for sessionID, userConn := range globalTabs {
+			if userConn != nil {
+				if err := userConn.WriteMessage(websocket.TextMessage, messageData); err != nil {
+					log.Printf("⚠️  Failed to send to global session %s: %v", sessionID, err)
+				} else {
+					globalSent++
+					sentCount++
+				}
+			}
+		}
+		if globalSent > 0 {
+			log.Printf("📤 Sent message to user %d via GLOBAL tabs (%d tabs)", userID, globalSent)
+			userCount++
+		}
+	}
+
+	// 2. Send to all exchange connections for this user
 	for connKey, exchConn := range hub.ExchangeConns {
 		if exchConn.UserID != userID {
 			continue
 		}
 
 		exchConn.mu.RLock()
+		exchangeSent := 0
 		for sessionID, userConn := range exchConn.UserTabs {
 			if userConn != nil {
 				if err := userConn.WriteMessage(websocket.TextMessage, messageData); err != nil {
-					log.Printf("⚠️  Failed to send to session %s: %v", sessionID, err)
+					log.Printf("⚠️  Failed to send to exchange session %s: %v", sessionID, err)
 				} else {
+					exchangeSent++
 					sentCount++
 				}
 			}
 		}
 		exchConn.mu.RUnlock()
 
-		log.Printf("📤 Sent message to user %d via connection %s (%d tabs)", userID, connKey, len(exchConn.UserTabs))
+		if exchangeSent > 0 {
+			log.Printf("📤 Sent message to user %d via connection %s (%d tabs)", userID, connKey, exchangeSent)
+			userCount++
+		}
 	}
 
 	if sentCount == 0 {
