@@ -10,8 +10,10 @@ import {
   TradingSignal,
 } from '@/services/signalService';
 import {listBotConfigs, BotConfig} from '@/services/botConfigService';
+import {getAccountInfo, AccountInfo} from '@/services/tradingService';
 import websocketService from '@/services/websocketService';
 import {getWebhookPrefix, createWebhookPrefix} from '@/services/signalService';
+import {getUser} from '@/services/authService';
 
 export default function SignalsPage() {
   const router = useRouter();
@@ -20,6 +22,8 @@ export default function SignalsPage() {
   const [selectedBotConfig, setSelectedBotConfig] = useState<number | null>(
     null,
   );
+  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
+  const [loadingAccount, setLoadingAccount] = useState(false);
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -32,6 +36,8 @@ export default function SignalsPage() {
   const [webhookURL, setWebhookURL] = useState<string>('');
   const [showWebhookModal, setShowWebhookModal] = useState(false);
   const [customPrefix, setCustomPrefix] = useState<string>('');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [testMode, setTestMode] = useState<boolean>(false); // 🧪 Test mode toggle
 
   // Use ref to store latest fetchData function for WebSocket handler
   const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
@@ -43,6 +49,12 @@ export default function SignalsPage() {
       if (!token) {
         router.push('/login');
         return;
+      }
+
+      // Get current user ID
+      const user = getUser();
+      if (user?.id) {
+        setCurrentUserId(user.id);
       }
 
       // Fetch signals
@@ -119,7 +131,32 @@ export default function SignalsPage() {
     initPrefix();
   }, []);
 
-  // 🔌 WebSocket Connection for Real-time Signal Notifications
+  // � Fetch account info when bot config is selected
+  useEffect(() => {
+    const fetchAccountInfo = async () => {
+      if (!selectedBotConfig) {
+        setAccountInfo(null);
+        return;
+      }
+
+      setLoadingAccount(true);
+      setAccountInfo(null);
+      try {
+        const info = await getAccountInfo(selectedBotConfig);
+        setAccountInfo(info);
+        console.log('✅ Fetched account info:', info);
+      } catch (err: any) {
+        console.error('❌ Error fetching account info:', err);
+        // Don't show error to user, just log it
+      } finally {
+        setLoadingAccount(false);
+      }
+    };
+
+    fetchAccountInfo();
+  }, [selectedBotConfig]);
+
+  // �🔌 WebSocket Connection for Real-time Signal Notifications
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -181,10 +218,12 @@ export default function SignalsPage() {
     try {
       const result = await executeSignal(signalId, {
         bot_config_id: selectedBotConfig,
+        test_mode: testMode, // 🧪 Pass test mode flag
       });
 
+      const modeLabel = testMode ? ' (TEST MODE - Mock Order)' : '';
       setSuccess(
-        `✅ Đặt lệnh thành công!\nOrder ID: ${result.order.id}\nSymbol: ${result.order.symbol}`,
+        `✅ Đặt lệnh thành công!${modeLabel}\nOrder ID: ${result.order.id}\nSymbol: ${result.order.symbol}`,
       );
 
       // Refresh signals
@@ -293,25 +332,9 @@ export default function SignalsPage() {
         </div>
       </div>
 
-      {/* Error/Success Alerts */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-green-800 whitespace-pre-line">
-            {success}
-          </p>
-        </div>
-      )}
-
-      {/* Filters & Bot Config Selection */}
+      {/* Bot Config Selection */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Bot Config Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Bot Config để đặt lệnh
@@ -333,6 +356,335 @@ export default function SignalsPage() {
             </select>
           </div>
 
+          {/* 🧪 Test Mode Toggle */}
+          <div className="flex items-end">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="testMode"
+                checked={testMode}
+                onChange={(e) => setTestMode(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="testMode"
+                className="ml-2 text-sm text-gray-700 cursor-pointer">
+                🧪 Test Mode{' '}
+                <span className="text-xs text-gray-500">
+                  (Bypass PlaceOrder)
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bot Config Info Cards - 3 Cards: Bot Config, Spot Trading, Futures Trading */}
+      {selectedBotConfig &&
+        botConfigs.length > 0 &&
+        (() => {
+          const config = botConfigs.find((c) => c.id === selectedBotConfig);
+          if (!config) return null;
+
+          const isFutures =
+            config.trading_mode?.toLowerCase() === 'futures' ||
+            config.trading_mode?.toLowerCase() === 'future';
+
+          return (
+            <div className="mb-6 space-y-3">
+              <h3 className="font-semibold text-gray-900">
+                📋 Thông tin Bot Config đang chọn
+              </h3>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {/* Card 1: Bot Config Info */}
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-indigo-900 flex items-center gap-2 text-sm">
+                      <span>⚙️</span>
+                      <span>Bot Config Info</span>
+                    </h4>
+                    {config.is_default && (
+                      <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                        Default
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg text-xs space-y-2">
+                    {config.name && (
+                      <p>
+                        <strong>Name:</strong> {config.name}
+                      </p>
+                    )}
+                    <p>
+                      <strong>Exchange:</strong> {config.exchange.toUpperCase()}
+                    </p>
+                    <p>
+                      <strong>Symbol:</strong> {config.symbol}
+                    </p>
+                    <p>
+                      <strong>Trading Mode:</strong>{' '}
+                      <span
+                        className={`px-1.5 py-0.5 rounded font-semibold ${
+                          isFutures
+                            ? 'bg-orange-100 text-orange-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                        {config.trading_mode || 'spot'}
+                      </span>
+                    </p>
+                    {config.amount && config.amount > 0 && (
+                      <p>
+                        <strong>Default Amount:</strong> {config.amount}
+                      </p>
+                    )}
+                    <div className="pt-2 border-t border-indigo-200">
+                      <p>
+                        <strong>Stop Loss:</strong>{' '}
+                        <span className="text-red-600 font-semibold">
+                          {config.stop_loss_percent}%
+                        </span>
+                      </p>
+                      <p>
+                        <strong>Take Profit:</strong>{' '}
+                        <span className="text-green-600 font-semibold">
+                          {config.take_profit_percent}%
+                        </span>
+                      </p>
+                      <p className="text-gray-500 text-[10px] mt-1">
+                        Risk/Reward:{' '}
+                        {(
+                          config.take_profit_percent / config.stop_loss_percent
+                        ).toFixed(2)}
+                        :1
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: SPOT Trading Info */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                      <span>📊</span>
+                      <span>SPOT Trading</span>
+                    </h4>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                      No Leverage
+                    </span>
+                  </div>
+
+                  {loadingAccount ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : accountInfo?.spot ? (
+                    <>
+                      {/* Spot Summary */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Tổng tài sản</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            ${accountInfo.spot.total_balance.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Khả dụng</p>
+                          <p className="text-lg font-bold text-green-600">
+                            ${accountInfo.spot.available_balance.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Spot Balances */}
+                      {accountInfo.spot.balances &&
+                        accountInfo.spot.balances.length > 0 && (
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500 mb-2">
+                              Tài sản chi tiết:
+                            </p>
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {accountInfo.spot.balances
+                                .filter((b) => b.total > 0.00001)
+                                .sort((a, b) => b.total - a.total)
+                                .map((balance, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between text-xs">
+                                    <span className="font-medium text-blue-700">
+                                      {balance.asset}
+                                    </span>
+                                    <div className="text-right">
+                                      <span className="text-gray-900 font-semibold">
+                                        {balance.total.toFixed(8)}
+                                      </span>
+                                      {balance.locked > 0 && (
+                                        <span className="text-orange-600 ml-2">
+                                          (🔒 {balance.locked.toFixed(8)})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  ) : (
+                    <>
+                      {/* No data - show $0.00 */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Tổng tài sản</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            $0.00
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Khả dụng</p>
+                          <p className="text-lg font-bold text-green-600">
+                            $0.00
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-2">
+                          Tài sản chi tiết:
+                        </p>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          <div className="text-xs text-gray-400 italic text-center py-2">
+                            Chưa có dữ liệu
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Card 3: FUTURES Trading Info */}
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                      <span>🚀</span>
+                      <span>FUTURES Trading</span>
+                    </h4>
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                      Up to 125x
+                    </span>
+                  </div>
+
+                  {loadingAccount ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                    </div>
+                  ) : accountInfo?.futures ? (
+                    <>
+                      {/* Futures Summary */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Tổng tài sản</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            ${accountInfo.futures.total_balance.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Khả dụng</p>
+                          <p className="text-lg font-bold text-green-600">
+                            ${accountInfo.futures.available_balance.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Futures Balances */}
+                      {accountInfo.futures.balances &&
+                        accountInfo.futures.balances.length > 0 && (
+                          <div className="bg-white p-3 rounded-lg">
+                            <p className="text-xs text-gray-500 mb-2">
+                              Tài sản chi tiết:
+                            </p>
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {accountInfo.futures.balances
+                                .filter((b) => b.total > 0.00001)
+                                .sort((a, b) => b.total - a.total)
+                                .map((balance, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between text-xs">
+                                    <span className="font-medium text-purple-700">
+                                      {balance.asset}
+                                    </span>
+                                    <div className="text-right">
+                                      <span className="text-gray-900 font-semibold">
+                                        {balance.total.toFixed(8)}
+                                      </span>
+                                      {balance.locked > 0 && (
+                                        <span className="text-orange-600 ml-2">
+                                          (🔒 {balance.locked.toFixed(8)})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  ) : (
+                    <>
+                      {/* No data - show $0.00 */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Tổng tài sản</p>
+                          <p className="text-lg font-bold text-gray-900">
+                            $0.00
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg">
+                          <p className="text-xs text-gray-500">Khả dụng</p>
+                          <p className="text-lg font-bold text-green-600">
+                            $0.00
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-2">
+                          Tài sản chi tiết:
+                        </p>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          <div className="text-xs text-gray-400 italic text-center py-2">
+                            Chưa có dữ liệu
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* Error/Success Alerts */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <p className="text-sm text-green-800 whitespace-pre-line">
+            {success}
+          </p>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Filter by Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -500,10 +852,24 @@ export default function SignalsPage() {
                             <button
                               onClick={() => handleExecuteSignal(signal.id)}
                               disabled={
-                                !selectedBotConfig || executing === signal.id
+                                !selectedBotConfig ||
+                                executing === signal.id ||
+                                (signal.executed_by_user_id === currentUserId &&
+                                  currentUserId !== null)
                               }
-                              className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded text-xs font-semibold">
-                              {executing === signal.id ? '⏳' : '✅ Đặt lệnh'}
+                              className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold"
+                              title={
+                                signal.executed_by_user_id === currentUserId &&
+                                currentUserId !== null
+                                  ? 'Bạn đã đặt lệnh cho signal này'
+                                  : undefined
+                              }>
+                              {executing === signal.id
+                                ? '⏳'
+                                : signal.executed_by_user_id ===
+                                    currentUserId && currentUserId !== null
+                                ? '✅ Đã đặt'
+                                : '✅ Đặt lệnh'}
                             </button>
                             {/* <button
                               onClick={() => handleIgnoreSignal(signal.id)}

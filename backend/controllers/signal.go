@@ -322,9 +322,43 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		// Place order on exchange
-		tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange)
-		orderResult := tradingService.PlaceOrder(&config, side, orderType, signal.Symbol, amount, price)
+		// 🧪 TEST MODE: Check if test_mode query parameter is set
+		testMode := c.Query("test_mode") == "true"
+
+		var orderResult tradingservice.OrderResult
+
+		if testMode {
+			// 🧪 BYPASS PlaceOrder - Create mock order result for testing
+			utils.LogInfo("🧪 TEST MODE: Bypassing PlaceOrder, creating mock order")
+
+			// Use signal price if available, otherwise generate a mock price
+			mockFilledPrice := price
+			if mockFilledPrice == 0 {
+				mockFilledPrice = signal.Price
+			}
+			if mockFilledPrice == 0 {
+				mockFilledPrice = 100.0 // Default mock price
+			}
+
+			orderResult = tradingservice.OrderResult{
+				Success:     true,
+				OrderID:     fmt.Sprintf("TEST-%d-%d", time.Now().Unix(), signalID),
+				Symbol:      signal.Symbol,
+				Side:        side,
+				Type:        orderType,
+				Quantity:    amount,
+				Price:       mockFilledPrice,
+				FilledPrice: mockFilledPrice,
+				Status:      "filled",
+				Error:       "",
+			}
+			utils.LogInfo(fmt.Sprintf("🧪 Mock Order Created: ID=%s, Symbol=%s, Side=%s, Qty=%.4f, Price=%.2f",
+				orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity, orderResult.FilledPrice))
+		} else {
+			// Place order on exchange (LIVE MODE)
+			tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange)
+			orderResult = tradingService.PlaceOrder(&config, side, orderType, signal.Symbol, amount, price)
+		}
 
 		if !orderResult.Success {
 			utils.LogError(fmt.Sprintf("❌ Failed to execute signal: %v", orderResult.Error))
@@ -402,8 +436,10 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		}
 
 		// Update signal status
+		uid := userID.(uint)
 		signal.Status = "executed"
 		signal.OrderID = &order.ID
+		signal.ExecutedByUserID = &uid
 		signal.ExecutedAt = time.Now()
 		services.DB.Save(&signal)
 

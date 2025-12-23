@@ -11,6 +11,7 @@ export interface TradingSignal {
   strategy: string;
   status: string; // pending, executed, failed, ignored
   order_id?: number;
+  executed_by_user_id?: number; // User ID who executed this signal
   error_message?: string;
   webhook_prefix?: string;
   received_at: string;
@@ -27,6 +28,7 @@ export interface SignalsResponse {
 
 export interface ExecuteSignalRequest {
   bot_config_id: number;
+  test_mode?: boolean; // 🧪 Enable test mode to bypass PlaceOrder
 }
 
 export interface ExecuteSignalResponse {
@@ -71,7 +73,11 @@ export const executeSignal = async (
   signalId: number,
   data: ExecuteSignalRequest,
 ): Promise<ExecuteSignalResponse> => {
-  const response = await api.post(`/signals/${signalId}/execute`, data);
+  // Add test_mode as query parameter if enabled
+  const params = data.test_mode ? {test_mode: 'true'} : {};
+  const response = await api.post(`/signals/${signalId}/execute`, data, {
+    params,
+  });
   return response.data;
 };
 
