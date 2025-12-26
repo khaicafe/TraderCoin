@@ -21,10 +21,19 @@ export interface Order {
   pnl?: number;
   pnl_percent?: number;
   bot_config_name?: string;
+  stop_loss_percent?: number; // From bot config
+  take_profit_percent?: number; // From bot config
+
+  // Position info from database (static values)
+  position_side?: string; // LONG/SHORT/BOTH
+  liquidation_price?: number;
+  margin_type?: string; // isolated/cross
+  isolated_margin?: number;
+
   created_at: string;
   updated_at: string;
 
-  // Position data (for futures orders)
+  // Position data from WebSocket (real-time values)
   position?: {
     position_amt?: string;
     entry_price?: string;
@@ -78,5 +87,18 @@ export const getCompletedOrders = async (
   params?: OrderHistoryParams,
 ): Promise<Order[]> => {
   const response = await api.get('/orders/completed', {params});
+  return response.data;
+};
+
+// Close all orders and position for a symbol
+export const closeOrder = async (
+  orderId: number,
+): Promise<{success: boolean; message: string}> => {
+  console.log('🔴 closeOrder called with orderId:', orderId);
+  console.log('🔴 API endpoint:', `/orders/close/${orderId}`);
+
+  const response = await api.post(`/orders/close/${orderId}`);
+
+  console.log('✅ closeOrder response:', response.data);
   return response.data;
 };

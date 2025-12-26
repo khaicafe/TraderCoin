@@ -1,6 +1,6 @@
 'use client';
 import {useState, useEffect} from 'react';
-import {Order, getOrderHistory} from '../../services/orderService';
+import {Order, getOrderHistory, closeOrder} from '../../services/orderService';
 import websocketService from '../../services/websocketService';
 
 // WebSocket message interface for order updates with position data
@@ -37,6 +37,18 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<string>('DISCONNECTED');
 
+  // Modal state
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [orderToClose, setOrderToClose] = useState<Order | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({show: false, message: '', type: 'success'});
+
   // Realtime prices: key = "ETHUSDT_FUTURES" hoặc "BTCUSDT" (Spot)
   const [realtimePrices, setRealtimePrices] = useState<{
     [key: string]: {price: number; change: number; percent: number};
@@ -48,6 +60,10 @@ export default function OrdersPage() {
     filled: 0,
     New: 0,
     cancelled: 0,
+    totalPnl: 0,
+    filledPnl: 0,
+    newPnl: 0,
+    cancelledPnl: 0,
   });
 
   // Filters
@@ -56,41 +72,6 @@ export default function OrdersPage() {
     status: '',
     side: '',
   });
-
-  const fetchOrdersBK = async () => {
-    try {
-      setLoading(true);
-      const params: any = {limit: 100, offset: 0};
-      if (filters.symbol) params.symbol = filters.symbol;
-      if (filters.status) params.status = filters.status;
-      if (filters.side) params.side = filters.side;
-
-      const data = await getOrderHistory(params);
-      setOrders(data);
-
-      // Calculate stats
-      const total = data.length;
-      const filled = data.filter((o) =>
-        ['filled', 'closed'].includes(o.status?.toLowerCase() ?? ''),
-      ).length;
-      const New = data.filter((o) =>
-        ['open', 'new', 'pending', 'partially_filled'].includes(
-          o.status?.toLowerCase() ?? '',
-        ),
-      ).length;
-      const cancelled = data.filter(
-        (o) => o.status?.toLowerCase() === 'cancelled',
-      ).length;
-
-      setStats({total, filled, New, cancelled});
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch orders:', err);
-      setError('Failed to load orders. Please try again later.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchOrders = async () => {
     try {
@@ -122,23 +103,76 @@ export default function OrdersPage() {
         );
       });
 
-      // Calculate stats
+      // Calculate stats with PnL
       const total = data.length;
-      const filled = data.filter(
+      const filledOrders = data.filter(
         (o) =>
           o.status?.toLowerCase() === 'filled' ||
           o.status?.toLowerCase() === 'closed',
-      ).length;
-      const New = data.filter(
+      );
+      const filled = filledOrders.length;
+
+      const newOrders = data.filter(
         (o) =>
           o.status?.toLowerCase() === 'open' ||
           o.status?.toLowerCase() === 'new',
-      ).length;
-      const cancelled = data.filter(
-        (o) => o.status?.toLowerCase() === 'cancelled',
-      ).length;
+      );
+      const New = newOrders.length;
 
-      setStats({total, filled, New, cancelled});
+      // For PnL calculation, only count orders with status = 'new' (not 'open', 'pending', etc.)
+      const newOrdersForPnl = data.filter(
+        (o) => o.status?.toLowerCase() === 'new',
+      );
+
+      const cancelledOrders = data.filter(
+        (o) => o.status?.toLowerCase() === 'cancelled',
+      );
+      const cancelled = cancelledOrders.length;
+
+      // Calculate PnL for each category
+      const calculateOrderPnl = (order: Order): number => {
+        const status = order.status?.toLowerCase();
+        const isFutures =
+          order.trading_mode?.toLowerCase() === 'futures' ||
+          order.trading_mode?.toLowerCase() === 'future';
+
+        // Futures closed: use order.pnl
+        if (isFutures && status === 'closed' && order.pnl) {
+          return order.pnl;
+        }
+
+        // Futures open: use position.unrealized_profit
+        if (isFutures && order.position?.unrealized_profit) {
+          return parseFloat(order.position.unrealized_profit);
+        }
+
+        return 0;
+      };
+
+      const totalPnl = data.reduce((sum, o) => sum + calculateOrderPnl(o), 0);
+      const filledPnl = filledOrders.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+      const newPnl = newOrdersForPnl.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+      const cancelledPnl = cancelledOrders.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+
+      setStats({
+        total,
+        filled,
+        New,
+        cancelled,
+        totalPnl,
+        filledPnl,
+        newPnl,
+        cancelledPnl,
+      });
       setError(null);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
@@ -159,19 +193,70 @@ export default function OrdersPage() {
       setOrders(data);
 
       const total = data.length;
-      const filled = data.filter((o) =>
+      const filledOrders = data.filter((o) =>
         ['filled', 'closed'].includes(o.status?.toLowerCase() ?? ''),
-      ).length;
-      const New = data.filter((o) =>
+      );
+      const filled = filledOrders.length;
+
+      const newOrders = data.filter((o) =>
         ['open', 'new', 'pending', 'partially_filled'].includes(
           o.status?.toLowerCase() ?? '',
         ),
-      ).length;
-      const cancelled = data.filter(
-        (o) => o.status?.toLowerCase() === 'cancelled',
-      ).length;
+      );
+      const New = newOrders.length;
 
-      setStats({total, filled, New, cancelled});
+      // For PnL calculation, only count orders with status = 'new' (not 'open', 'pending', etc.)
+      const newOrdersForPnl = data.filter(
+        (o) => o.status?.toLowerCase() === 'new',
+      );
+
+      const cancelledOrders = data.filter(
+        (o) => o.status?.toLowerCase() === 'cancelled',
+      );
+      const cancelled = cancelledOrders.length;
+
+      // Calculate PnL for each category
+      const calculateOrderPnl = (order: Order): number => {
+        const status = order.status?.toLowerCase();
+        const isFutures =
+          order.trading_mode?.toLowerCase() === 'futures' ||
+          order.trading_mode?.toLowerCase() === 'future';
+
+        if (isFutures && status === 'closed' && order.pnl) {
+          return order.pnl;
+        }
+
+        if (isFutures && order.position?.unrealized_profit) {
+          return parseFloat(order.position.unrealized_profit);
+        }
+
+        return 0;
+      };
+
+      const totalPnl = data.reduce((sum, o) => sum + calculateOrderPnl(o), 0);
+      const filledPnl = filledOrders.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+      const newPnl = newOrdersForPnl.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+      const cancelledPnl = cancelledOrders.reduce(
+        (sum, o) => sum + calculateOrderPnl(o),
+        0,
+      );
+
+      setStats({
+        total,
+        filled,
+        New,
+        cancelled,
+        totalPnl,
+        filledPnl,
+        newPnl,
+        cancelledPnl,
+      });
     } catch (err) {
       // Silent fail on refresh
     }
@@ -288,6 +373,77 @@ export default function OrdersPage() {
       setLoading(false);
     }
   }, [filters]);
+
+  // Recalculate stats (especially PnL) when orders change (e.g., WebSocket updates)
+  useEffect(() => {
+    if (orders.length === 0) return;
+
+    const total = orders.length;
+    const filledOrders = orders.filter((o) =>
+      ['filled', 'closed'].includes(o.status?.toLowerCase() ?? ''),
+    );
+    const filled = filledOrders.length;
+
+    const newOrders = orders.filter((o) =>
+      ['open', 'new', 'pending', 'partially_filled'].includes(
+        o.status?.toLowerCase() ?? '',
+      ),
+    );
+    const New = newOrders.length;
+
+    // For PnL calculation, only count orders with status = 'new'
+    const newOrdersForPnl = orders.filter(
+      (o) => o.status?.toLowerCase() === 'new',
+    );
+
+    const cancelledOrders = orders.filter(
+      (o) => o.status?.toLowerCase() === 'cancelled',
+    );
+    const cancelled = cancelledOrders.length;
+
+    // Calculate PnL for each category
+    const calculateOrderPnl = (order: Order): number => {
+      const status = order.status?.toLowerCase();
+      const isFutures =
+        order.trading_mode?.toLowerCase() === 'futures' ||
+        order.trading_mode?.toLowerCase() === 'future';
+
+      if (isFutures && status === 'closed' && order.pnl) {
+        return order.pnl;
+      }
+
+      if (isFutures && order.position?.unrealized_profit) {
+        return parseFloat(order.position.unrealized_profit);
+      }
+
+      return 0;
+    };
+
+    const totalPnl = orders.reduce((sum, o) => sum + calculateOrderPnl(o), 0);
+    const filledPnl = filledOrders.reduce(
+      (sum, o) => sum + calculateOrderPnl(o),
+      0,
+    );
+    const newPnl = newOrdersForPnl.reduce(
+      (sum, o) => sum + calculateOrderPnl(o),
+      0,
+    );
+    const cancelledPnl = cancelledOrders.reduce(
+      (sum, o) => sum + calculateOrderPnl(o),
+      0,
+    );
+
+    setStats({
+      total,
+      filled,
+      New,
+      cancelled,
+      totalPnl,
+      filledPnl,
+      newPnl,
+      cancelledPnl,
+    });
+  }, [orders]); // Re-run when orders change
 
   // 🔥 REAL-TIME PRICE VIA BINANCE FUTURES + SPOT WEBSOCKET
   useEffect(() => {
@@ -491,53 +647,74 @@ export default function OrdersPage() {
     return side?.toLowerCase() === 'sell' ? -base : base;
   };
 
-  const calculatePnL = (
-    order: Order,
-    currentPrice: number | null,
-  ): number | null => {
-    if (!currentPrice || !order.quantity) return null;
-    const entryPrice = order.filled_price || order.price;
-    if (!entryPrice || entryPrice === 0) return null;
-    const quantity = order.quantity;
-    const side = order.side?.toLowerCase();
-
-    return side === 'buy'
-      ? (currentPrice - entryPrice) * quantity
-      : (entryPrice - currentPrice) * quantity;
+  // Calculate Stop Loss price from percentage
+  const calculateStopLossPrice = (
+    entryPrice: number,
+    slPercent: number,
+    side: string,
+  ): number => {
+    // LONG: SL price = entry * (1 - slPercent/100)
+    // SHORT: SL price = entry * (1 + slPercent/100)
+    if (side?.toLowerCase() === 'buy') {
+      return entryPrice * (1 - slPercent / 100);
+    } else {
+      return entryPrice * (1 + slPercent / 100);
+    }
   };
 
-  const calculateROI = (order: Order, pnl: number | null): number | null => {
-    if (pnl === null || !order.quantity) return null;
-    const entryPrice = order.filled_price || order.price;
-    if (!entryPrice || entryPrice === 0) return null;
-    const investment = entryPrice * order.quantity;
-    return investment === 0 ? null : (pnl / investment) * 100;
+  // Calculate Take Profit price from percentage
+  const calculateTakeProfitPrice = (
+    entryPrice: number,
+    tpPercent: number,
+    side: string,
+  ): number => {
+    // LONG: TP price = entry * (1 + tpPercent/100)
+    // SHORT: TP price = entry * (1 - tpPercent/100)
+    if (side?.toLowerCase() === 'buy') {
+      return entryPrice * (1 + tpPercent / 100);
+    } else {
+      return entryPrice * (1 - tpPercent / 100);
+    }
   };
 
-  const getCurrentPriceForPnL = (order: Order): number | null => {
+  // ⭐ Lấy PnL từ data có sẵn (API hoặc WebSocket), KHÔNG tính toán
+  const getPnL = (order: Order): number | null => {
     const status = order.status?.toLowerCase();
     const isFutures =
       order.trading_mode?.toLowerCase() === 'futures' ||
       order.trading_mode?.toLowerCase() === 'future';
 
-    // Futures: Chỉ dừng cập nhật khi status = 'closed'
-    // Spot: Dừng cập nhật khi status = 'filled' hoặc 'closed'
-    const shouldStopUpdating = isFutures
-      ? status === 'closed'
-      : ['filled', 'closed'].includes(status ?? '');
-
-    if (shouldStopUpdating) {
-      return order.filled_price || null;
+    // Futures đã đóng: Lấy từ database (order.pnl)
+    if (isFutures && status === 'closed') {
+      return order.pnl ?? null;
     }
 
-    const priceKey = isFutures ? `${order.symbol}_FUTURES` : order.symbol;
+    // Futures đang mở: Lấy từ WebSocket position data
+    if (isFutures && order.position?.unrealized_profit) {
+      return parseFloat(order.position.unrealized_profit);
+    }
 
-    if (realtimePrices[priceKey]) {
-      return realtimePrices[priceKey].price;
+    // Spot hoặc không có data: null
+    return null;
+  };
+
+  const getPnLPercent = (order: Order): number | null => {
+    const status = order.status?.toLowerCase();
+    const isFutures =
+      order.trading_mode?.toLowerCase() === 'futures' ||
+      order.trading_mode?.toLowerCase() === 'future';
+
+    // Futures đã đóng: Lấy từ database (order.pnl_percent)
+    if (isFutures && status === 'closed') {
+      return order.pnl_percent ?? null;
     }
-    if (order.current_price) {
-      return order.current_price;
+
+    // Futures đang mở: Lấy từ WebSocket position data
+    if (isFutures && order.position?.pnl_percent) {
+      return parseFloat(order.position.pnl_percent);
     }
+
+    // Spot hoặc không có data: null
     return null;
   };
 
@@ -570,18 +747,60 @@ export default function OrdersPage() {
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Tổng Lệnh</p>
           <p className="text-3xl font-bold mt-2">{stats.total}</p>
+          <div className="mt-3 pt-3 border-t border-purple-400">
+            <p className="text-xs opacity-75">PnL:</p>
+            <p
+              className={`text-lg font-semibold ${
+                (stats.totalPnl || 0) >= 0 ? 'text-green-200' : 'text-red-200'
+              }`}>
+              {(stats.totalPnl || 0) >= 0 ? '+' : ''}$
+              {(stats.totalPnl || 0).toFixed(2)}
+            </p>
+          </div>
         </div>
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Đã Khớp</p>
           <p className="text-3xl font-bold mt-2">{stats.filled}</p>
+          <div className="mt-3 pt-3 border-t border-green-400">
+            <p className="text-xs opacity-75">PnL:</p>
+            <p
+              className={`text-lg font-semibold ${
+                (stats.filledPnl || 0) >= 0 ? 'text-green-200' : 'text-red-200'
+              }`}>
+              {(stats.filledPnl || 0) >= 0 ? '+' : ''}$
+              {(stats.filledPnl || 0).toFixed(2)}
+            </p>
+          </div>
         </div>
         <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Đang Chờ</p>
           <p className="text-3xl font-bold mt-2">{stats.New}</p>
+          <div className="mt-3 pt-3 border-t border-yellow-400">
+            <p className="text-xs opacity-75">PnL (Realtime):</p>
+            <p
+              className={`text-lg font-semibold animate-pulse ${
+                (stats.newPnl || 0) >= 0 ? 'text-green-200' : 'text-red-200'
+              }`}>
+              {(stats.newPnl || 0) >= 0 ? '+' : ''}$
+              {(stats.newPnl || 0).toFixed(2)}
+            </p>
+          </div>
         </div>
         <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg shadow p-6">
           <p className="text-sm opacity-90">Đã Hủy</p>
           <p className="text-3xl font-bold mt-2">{stats.cancelled}</p>
+          <div className="mt-3 pt-3 border-t border-red-400">
+            <p className="text-xs opacity-75">PnL:</p>
+            <p
+              className={`text-lg font-semibold ${
+                (stats.cancelledPnl || 0) >= 0
+                  ? 'text-green-200'
+                  : 'text-red-200'
+              }`}>
+              {(stats.cancelledPnl || 0) >= 0 ? '+' : ''}$
+              {(stats.cancelledPnl || 0).toFixed(2)}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -669,30 +888,29 @@ export default function OrdersPage() {
                     Order Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Status
+                    Status / Exchange
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Trading Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Position / Liq
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Price / PnL
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Position
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Liq Price
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     SL / TP
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Action
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {orders.map((order) => {
-                  const currentPrice = getCurrentPriceForPnL(order);
-                  const pnl = calculatePnL(order, currentPrice);
-                  const roi = calculateROI(order, pnl);
+                  const pnl = getPnL(order);
+                  const pnlPercent = getPnLPercent(order);
                   const isOpen = [
                     'new',
                     'open',
@@ -715,6 +933,15 @@ export default function OrdersPage() {
                           </div>
                           <div className="flex items-center gap-1">
                             <span className="text-xs text-gray-500 font-medium">
+                              Exchange:
+                            </span>
+                            <span className="px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800 uppercase">
+                              {order.exchange || 'Unknown'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
                               Order:
                             </span>
                             <span className="text-sm font-mono text-blue-600">
@@ -732,31 +959,50 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded capitalize ${
-                            ['filled', 'closed'].includes(
-                              order.status?.toLowerCase() ?? '',
-                            )
-                              ? 'bg-green-100 text-green-800'
-                              : order.status?.toLowerCase() === 'new'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : order.status?.toLowerCase() === 'cancelled'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                          {order.status}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded capitalize ${
+                              ['filled', 'closed'].includes(
+                                order.status?.toLowerCase() ?? '',
+                              )
+                                ? 'bg-green-100 text-green-800'
+                                : order.status?.toLowerCase() === 'new'
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : order.status?.toLowerCase() === 'cancelled'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                            {order.status}
+                          </span>
+                          <span className="uppercase px-2 py-0.5 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 capitalize">
+                            {order.trading_mode || 'spot'}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1.5">
                           {/* Symbol */}
-                          <span className="text-sm font-bold">
-                            {formatSymbol(order.symbol)}
-                          </span>
-                          {/* Badges */}
-                          <div className="flex gap-1 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Symbol:
+                            </span>
+                            <span className="text-sm font-bold">
+                              {formatSymbol(order.symbol)}
+                            </span>
+                          </div>
+                          {/* Mode */}
+                          {/* <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Mode:
+                            </span>
                             <span className="px-2 py-0.5 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 capitalize">
                               {order.trading_mode || 'spot'}
+                            </span>
+                          </div> */}
+                          {/* Side */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Side:
                             </span>
                             <span
                               className={`px-2 py-0.5 text-xs font-semibold rounded uppercase ${
@@ -765,6 +1011,12 @@ export default function OrdersPage() {
                                   : 'bg-red-100 text-red-800'
                               }`}>
                               {order.side}
+                            </span>
+                          </div>
+                          {/* Type */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Type:
                             </span>
                             <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-800 capitalize">
                               {order.type}
@@ -780,6 +1032,98 @@ export default function OrdersPage() {
                             </span>
                           </div>
                         </div>
+                      </td>
+                      {/* Position & Liquidation Price - Combined */}
+                      <td className="px-6 py-4 text-sm">
+                        {(() => {
+                          // Lấy position side từ DB (LONG/SHORT)
+                          const positionSide =
+                            order.position_side ||
+                            order.position?.position_side;
+                          const leverage =
+                            order.leverage || order.position?.leverage;
+                          const marginType =
+                            order.margin_type || order.position?.margin_type;
+                          const isIsolated =
+                            marginType === 'isolated' ||
+                            order.position?.isolated;
+
+                          // Liq price: Ưu tiên lấy từ WebSocket, fallback về DB
+                          const liqPrice = order.position?.liquidation_price
+                            ? parseFloat(order.position.liquidation_price)
+                            : order.liquidation_price;
+
+                          // Nếu không có thông tin gì
+                          if (
+                            !positionSide &&
+                            !leverage &&
+                            !marginType &&
+                            !liqPrice
+                          ) {
+                            return <span className="text-gray-400">-</span>;
+                          }
+
+                          return (
+                            <div className="space-y-1.5">
+                              {/* Position Direction (LONG/SHORT only, không show BOTH) */}
+                              {positionSide && positionSide !== 'BOTH' && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">
+                                    Position:
+                                  </span>
+                                  <span
+                                    className={`text-xs font-semibold ${
+                                      positionSide === 'LONG'
+                                        ? 'text-green-600'
+                                        : positionSide === 'SHORT'
+                                        ? 'text-red-600'
+                                        : 'text-gray-500'
+                                    }`}>
+                                    {positionSide}
+                                  </span>
+                                </div>
+                              )}
+                              {/* Leverage */}
+                              {leverage && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">
+                                    Leverage:
+                                  </span>
+                                  <span className="text-xs text-purple-600 font-medium">
+                                    {leverage}x
+                                  </span>
+                                </div>
+                              )}
+                              {/* Margin Type */}
+                              {marginType && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">
+                                    Margin:
+                                  </span>
+                                  <span
+                                    className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                      isIsolated
+                                        ? 'bg-orange-100 text-orange-700'
+                                        : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {isIsolated ? 'Isolated' : 'Cross'}
+                                  </span>
+                                </div>
+                              )}
+                              {/* Liquidation Price */}
+                              {liqPrice && liqPrice > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-500">
+                                    Liq:
+                                  </span>
+                                  <span className="text-red-600 font-semibold text-xs">
+                                    ${liqPrice.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1">
@@ -857,19 +1201,9 @@ export default function OrdersPage() {
                               PnL:
                             </span>
                             {(() => {
-                              // Ưu tiên dùng position data nếu có
-                              const positionPnl = order.position
-                                ?.unrealized_profit
-                                ? parseFloat(order.position.unrealized_profit)
-                                : null;
-                              const positionRoi = order.position?.pnl_percent
-                                ? parseFloat(order.position.pnl_percent)
-                                : null;
-
-                              const displayPnl =
-                                positionPnl !== null ? positionPnl : pnl;
-                              const displayRoi =
-                                positionRoi !== null ? positionRoi : roi;
+                              // Lấy PnL từ data có sẵn (không tính toán)
+                              const displayPnl = pnl;
+                              const displayRoi = pnlPercent;
 
                               if (displayPnl === null && displayRoi === null) {
                                 return (
@@ -896,7 +1230,7 @@ export default function OrdersPage() {
                                     <span
                                       className={`text-xs font-medium ${
                                         displayRoi >= 0
-                                          ? 'text-green-500'
+                                          ? 'text-green-700'
                                           : 'text-red-500'
                                       }`}>
                                       ({displayRoi >= 0 ? '+' : ''}
@@ -909,116 +1243,89 @@ export default function OrdersPage() {
                           </div>
                         </div>
                       </td>
-                      {/* Position Info - NEW */}
+
+                      {/* SL/TP Column */}
                       <td className="px-6 py-4 text-sm">
-                        {order.position ? (
-                          <div className="space-y-1">
-                            <div
-                              className={`text-xs font-semibold ${
-                                parseFloat(order.position.position_amt || '0') >
-                                0
-                                  ? 'text-green-600'
-                                  : parseFloat(
-                                      order.position.position_amt || '0',
-                                    ) < 0
-                                  ? 'text-red-600'
-                                  : 'text-gray-500'
-                              }`}>
-                              {parseFloat(order.position.position_amt || '0') >
-                              0
-                                ? 'LONG'
-                                : parseFloat(
-                                    order.position.position_amt || '0',
-                                  ) < 0
-                                ? 'SHORT'
-                                : 'NONE'}{' '}
-                              {Math.abs(
-                                parseFloat(order.position.position_amt || '0'),
+                        {(() => {
+                          const entryPrice = order.filled_price || order.price;
+                          const hasSlPercent =
+                            order.stop_loss_percent &&
+                            order.stop_loss_percent > 0;
+                          const hasTpPercent =
+                            order.take_profit_percent &&
+                            order.take_profit_percent > 0;
+
+                          if (!hasSlPercent && !hasTpPercent) {
+                            return <span className="text-gray-400">-</span>;
+                          }
+
+                          return (
+                            <div className="space-y-1">
+                              {hasSlPercent && (
+                                <div className="text-red-600 font-medium text-xs whitespace-nowrap">
+                                  SL: $
+                                  {calculateStopLossPrice(
+                                    entryPrice,
+                                    order.stop_loss_percent!,
+                                    order.side,
+                                  ).toFixed(5)}{' '}
+                                  <span className="text-red-500">
+                                    (-{order.stop_loss_percent!.toFixed(2)}%)
+                                  </span>
+                                </div>
+                              )}
+                              {hasTpPercent && (
+                                <div className="text-green-600 font-medium text-xs whitespace-nowrap">
+                                  TP: $
+                                  {calculateTakeProfitPrice(
+                                    entryPrice,
+                                    order.take_profit_percent!,
+                                    order.side,
+                                  ).toFixed(5)}{' '}
+                                  <span className="text-green-700">
+                                    (+{order.take_profit_percent!.toFixed(2)}%)
+                                  </span>
+                                </div>
                               )}
                             </div>
-                            {order.position.leverage && (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-purple-600 font-medium">
-                                  {order.position.leverage}x
-                                </span>
-                                <span
-                                  className={`text-xs px-2 py-0.5 rounded font-medium ${
-                                    order.position.isolated
-                                      ? 'bg-orange-100 text-orange-700'
-                                      : 'bg-blue-100 text-blue-700'
-                                  }`}>
-                                  {order.position.isolated
-                                    ? 'Isolated'
-                                    : 'Cross'}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
+                          );
+                        })()}
                       </td>
-                      {/* Liquidation Price - NEW */}
-                      <td className="px-6 py-4 text-sm">
-                        {order.position?.liquidation_price &&
-                        parseFloat(order.position.liquidation_price) > 0 ? (
-                          <span className="text-red-600 font-semibold text-xs">
-                            $
-                            {parseFloat(
-                              order.position.liquidation_price,
-                            ).toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {order.stop_loss_price || order.take_profit_price ? (
-                          <div className="space-y-1">
-                            {order.stop_loss_price && (
-                              <div className="text-red-600 font-medium text-xs whitespace-nowrap">
-                                SL: ${order.stop_loss_price.toFixed(2)}{' '}
-                                {calcTargetPercent(
-                                  order.stop_loss_price,
-                                  order.filled_price || order.price,
-                                  order.side,
-                                ) !== null && (
-                                  <span>
-                                    (
-                                    {calcTargetPercent(
-                                      order.stop_loss_price,
-                                      order.filled_price || order.price,
-                                      order.side,
-                                    )?.toFixed(2)}
-                                    %)
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {order.take_profit_price && (
-                              <div className="text-green-600 font-medium text-xs whitespace-nowrap">
-                                TP: ${order.take_profit_price.toFixed(2)}{' '}
-                                {calcTargetPercent(
-                                  order.take_profit_price,
-                                  order.filled_price || order.price,
-                                  order.side,
-                                ) !== null && (
-                                  <span>
-                                    (+
-                                    {calcTargetPercent(
-                                      order.take_profit_price,
-                                      order.filled_price || order.price,
-                                      order.side,
-                                    )?.toFixed(2)}
-                                    %)
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          '-'
-                        )}
+
+                      {/* Action Column */}
+                      <td className="px-6 py-4 text-sm text-center">
+                        {(() => {
+                          const isSpot =
+                            order.trading_mode?.toLowerCase() === 'spot';
+                          const isFutures =
+                            order.trading_mode?.toLowerCase() === 'futures';
+                          const status = order.status?.toLowerCase();
+
+                          // Enable button logic:
+                          // - Spot: status = 'filled'
+                          // - Futures: status = 'new'
+                          const canClose =
+                            (isSpot && status === 'filled') ||
+                            (isFutures && status === 'new');
+
+                          return (
+                            <button
+                              onClick={() => {
+                                if (canClose) {
+                                  setOrderToClose(order);
+                                  setShowCloseModal(true);
+                                }
+                              }}
+                              disabled={!canClose}
+                              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                                canClose
+                                  ? 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'
+                                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              }`}>
+                              Close
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1028,6 +1335,171 @@ export default function OrdersPage() {
           </div>
         )}
       </div>
+
+      {/* Close Order Confirmation Modal */}
+      {showCloseModal && orderToClose && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              Confirm Close Order
+            </h3>
+
+            <div className="mb-6 space-y-2 bg-gray-50 p-4 rounded">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Symbol:</span>
+                <span className="font-medium">{orderToClose.symbol}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Mode:</span>
+                <span className="font-medium">{orderToClose.trading_mode}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Side:</span>
+                <span
+                  className={`font-medium ${
+                    orderToClose.side?.toLowerCase() === 'buy'
+                      ? 'text-green-600'
+                      : 'text-red-600'
+                  }`}>
+                  {orderToClose.side}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Amount:</span>
+                <span className="font-medium">{orderToClose.quantity}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Entry Price:</span>
+                <span className="font-medium">
+                  $
+                  {(
+                    orderToClose.filled_price ||
+                    orderToClose.price ||
+                    0
+                  ).toFixed(5)}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-6">
+              <p className="text-sm text-yellow-800">
+                <strong>Warning:</strong> This will close your position
+                immediately at market price. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCloseModal(false);
+                  setOrderToClose(null);
+                }}
+                disabled={closing}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!orderToClose) return;
+
+                  setClosing(true);
+                  try {
+                    // Call API to close all orders and position for this symbol
+                    const result = await closeOrder(orderToClose.id);
+
+                    // Refresh orders after successful close
+                    await fetchOrders();
+
+                    // Close modal first
+                    setShowCloseModal(false);
+                    setOrderToClose(null);
+
+                    // Show success toast
+                    setToast({
+                      show: true,
+                      message: result.message || 'Order closed successfully!',
+                      type: 'success',
+                    });
+
+                    // Auto hide toast after 3 seconds
+                    setTimeout(() => {
+                      setToast({show: false, message: '', type: 'success'});
+                    }, 3000);
+                  } catch (err: any) {
+                    console.error('Failed to close order:', err);
+
+                    // Close modal
+                    setShowCloseModal(false);
+                    setOrderToClose(null);
+
+                    // Show error toast with API error message if available
+                    const errorMessage =
+                      err.response?.data?.error ||
+                      err.response?.data?.details ||
+                      'Failed to close order. Please try again.';
+                    setToast({
+                      show: true,
+                      message: errorMessage,
+                      type: 'error',
+                    });
+
+                    // Auto hide toast after 3 seconds
+                    setTimeout(() => {
+                      setToast({show: false, message: '', type: 'error'});
+                    }, 3000);
+                  } finally {
+                    setClosing(false);
+                  }
+                }}
+                disabled={closing}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
+                {closing ? 'Closing...' : 'Close Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slideUp">
+          <div
+            className={`px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 ${
+              toast.type === 'success'
+                ? 'bg-green-500 text-white'
+                : 'bg-red-500 text-white'
+            }`}>
+            {toast.type === 'success' ? (
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            )}
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

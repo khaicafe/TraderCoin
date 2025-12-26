@@ -176,6 +176,13 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 
 					// Update database with position info (entry price, leverage, PnL)
 					updateFields := make(map[string]interface{})
+
+					// ⭐ LUÔN LƯU PNL MỖI LẦN CHECK (khi position còn đang mở)
+					order.PnL = position.UnrealizedProfit
+					order.PnLPercent = position.PnlPercent
+					updateFields["pn_l"] = position.UnrealizedProfit
+					updateFields["pn_l_percent"] = position.PnlPercent
+
 					if order.FilledPrice == 0 && position.EntryPrice > 0 {
 						order.FilledPrice = position.EntryPrice
 						order.Price = position.EntryPrice // Also set Price if not set
@@ -183,16 +190,43 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 						updateFields["price"] = position.EntryPrice
 						log.Printf("   📝 Updated FilledPrice from position: %.2f", position.EntryPrice)
 					}
+
 					if order.Leverage == 0 && position.Leverage > 0 {
 						order.Leverage = position.Leverage
 						updateFields["leverage"] = position.Leverage
 						log.Printf("   📝 Updated Leverage from position: %dx", position.Leverage)
 					}
+
+					// ⭐ LƯU POSITION INFO VÀO DB (không lưu position_amt và mark_price vì thay đổi liên tục)
+					// Position Side: Tính từ side của order, không lấy từ API
+					positionSide := "LONG"
+					if strings.ToUpper(order.Side) == "SELL" {
+						positionSide = "SHORT"
+					}
+					order.PositionSide = positionSide
+					updateFields["position_side"] = positionSide
+
+					if position.LiquidationPrice > 0 {
+						order.LiquidationPrice = position.LiquidationPrice
+						updateFields["liquidation_price"] = position.LiquidationPrice
+					}
+
+					if position.MarginType != "" {
+						order.MarginType = position.MarginType
+						updateFields["margin_type"] = position.MarginType
+					}
+
+					if position.IsolatedMargin > 0 {
+						order.IsolatedMargin = position.IsolatedMargin
+						updateFields["isolated_margin"] = position.IsolatedMargin
+					}
+
 					if len(updateFields) > 0 {
 						if err := oms.DB.Model(&models.Order{}).Where("id = ?", order.ID).Updates(updateFields).Error; err != nil {
 							log.Printf("⚠️  Order %d: Failed to update position info: %v", order.ID, err)
 						} else {
-							log.Printf("✅ Order %d: Updated FilledPrice and Leverage in database", order.ID)
+							log.Printf("✅ Order %d: Updated position info - PnL: %.4f USDT (%.2f%%)",
+								order.ID, position.UnrealizedProfit, position.PnlPercent)
 						}
 					}
 

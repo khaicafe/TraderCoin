@@ -44,6 +44,8 @@ type OrderResult struct {
 	Status           string      `json:"status"`
 	AlgoIDStopLoss   string      `json:"algo_id_stop_loss,omitempty"`
 	AlgoIDTakeProfit string      `json:"algo_id_take_profit,omitempty"`
+	StopLossPrice    float64     `json:"stop_loss_price,omitempty"`
+	TakeProfitPrice  float64     `json:"take_profit_price,omitempty"`
 	Error            string      `json:"error,omitempty"`
 	ErrorDetails     interface{} `json:"error_details,omitempty"`
 }
@@ -101,6 +103,78 @@ func (ts *TradingService) GetCurrentPrice(config *models.TradingConfig, symbol s
 	}
 
 	return price, nil
+}
+
+// GetMarkPrice lấy mark price cho Futures (dùng để validate SL/TP)
+func (ts *TradingService) GetMarkPrice(symbol string) (float64, error) {
+	isTestnet := false
+	adapter := GetExchangeAdapter("binance", isTestnet).(*BinanceAdapter)
+
+	fullURL := fmt.Sprintf("%s/fapi/v1/premiumIndex?symbol=%s", adapter.FuturesAPIURL, symbol)
+
+	resp, err := http.Get(fullURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get mark price: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var markPriceResp struct {
+		Symbol    string `json:"symbol"`
+		MarkPrice string `json:"markPrice"`
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &markPriceResp); err != nil {
+		return 0, fmt.Errorf("failed to parse mark price: %w", err)
+	}
+
+	markPrice, err := strconv.ParseFloat(markPriceResp.MarkPrice, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid mark price format: %w", err)
+	}
+
+	return markPrice, nil
+}
+
+// FormatPriceByTickSize làm tròn giá theo tickSize của symbol
+// DOGEUSDT: tickSize=0.00001 → 5 decimals
+// ETHUSDT: tickSize=0.01 → 2 decimals
+// BTCUSDT: tickSize=0.1 → 1 decimal
+func (ts *TradingService) FormatPriceByTickSize(symbol string, price float64) string {
+	// Map common symbols to their tick sizes
+	tickSizeMap := map[string]float64{
+		"BTCUSDT":   0.1,
+		"ETHUSDT":   0.01,
+		"BNBUSDT":   0.01,
+		"DOGEUSDT":  0.00001,
+		"ADAUSDT":   0.00001,
+		"XRPUSDT":   0.0001,
+		"SOLUSDT":   0.001,
+		"DOTUSDT":   0.001,
+		"MATICUSDT": 0.0001,
+		"SHIBUSDT":  0.00000001,
+	}
+
+	tickSize, exists := tickSizeMap[symbol]
+	if !exists {
+		// Default: 8 decimals for unknown symbols
+		return fmt.Sprintf("%.8f", price)
+	}
+
+	// Calculate precision from tickSize
+	precision := 0
+	temp := tickSize
+	for temp < 1 {
+		precision++
+		temp *= 10
+	}
+
+	// Round to tick size
+	rounded := math.Round(price/tickSize) * tickSize
+
+	// Format with correct precision
+	format := fmt.Sprintf("%%.%df", precision)
+	return fmt.Sprintf(format, rounded)
 }
 
 // ValidateNotional kiểm tra minimum notional cho Binance Futures
@@ -180,25 +254,9 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 		// 	}
 		// }
 
-		////////// STEP 3: Pre-cleanup (correct order): first close position, then cancel all open orders
-		closeRes := ts.CloseFuturesPositionMarket(config, symbol)
-		if closeRes.Success {
-			fmt.Printf("✅ Closed existing position for %s before placing new order\n", symbol)
-		} else if closeRes.Error != "no-position" { // no-position is not an error
-			fmt.Printf("⚠️  Failed to close existing position for %s: %s\n", symbol, closeRes.Error)
-		}
-
-		cleanupErr := ts.CancelAllOpenOrders(config, symbol)
-		if cleanupErr != nil {
-			fmt.Printf("⚠️  Failed to cancel open orders for %s: %v\n", symbol, cleanupErr)
-		} else {
-			fmt.Printf("✅ Canceled all open orders for %s before placing new order\n", symbol)
-		}
-
-		////////// Cancel any existing Trailing Stop (ALGO) orders for the symbol //////////
-		err := ts.CancelAllTrailingStops(symbol)
-		if err != nil {
-			fmt.Println("Canceled:", err)
+		////////// STEP 3: Pre-cleanup - Cancel all orders and close position
+		if err := ts.CancelAllOrdersAndPosition(config, symbol); err != nil {
+			fmt.Printf("⚠️  Warning: Cleanup had issues: %v\n", err)
 		}
 
 		time.Sleep(500 * time.Millisecond) // small delay to ensure state settles
@@ -387,6 +445,8 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	fmt.Printf("   Stop Loss %%: %.2f\n", config.StopLossPercent)
 	fmt.Printf("   Take Profit %%: %.2f\n\n", config.TakeProfitPercent)
 
+	// time.Sleep(3 * time.Second) // small delay to ensure state settles
+
 	//////////// Đặt TP/SL tự động nếu có cấu hình trong bot (chỉ cho Futures) //////////
 	var algoIDStopLoss, algoIDTakeProfit string
 	if tradingMode == "futures" {
@@ -460,14 +520,14 @@ func (ts *TradingService) placeAutoTPSL(
 		time.Sleep(2 * time.Second)
 
 		// Check order status again
-		statusResult := ts.CheckOrderStatus(config, strconv.FormatInt(binanceResp.OrderID, 10), symbol, "")
-		if statusResult.Success && statusResult.Status == "filled" {
-			fmt.Printf("✅ Order now FILLED after check\n")
-			// Update filled price from status check
-			if statusResult.AvgPrice > 0 {
-				filledPrice = statusResult.AvgPrice
-			}
-		}
+		// statusResult := ts.CheckOrderStatus(config, strconv.FormatInt(binanceResp.OrderID, 10), symbol, "")
+		// if statusResult.Success && statusResult.Status == "filled" {
+		// 	fmt.Printf("✅ Order now FILLED after check\n")
+		// 	// Update filled price from status check
+		// 	if statusResult.AvgPrice > 0 {
+		// 		filledPrice = statusResult.AvgPrice
+		// 	}
+		// }
 	}
 
 	slEnabled := "❌"
@@ -519,12 +579,52 @@ func (ts *TradingService) placeAutoTPSL(
 	fmt.Printf("\n🔍 DEBUG BEFORE SL: StopLossPercent=%.2f, TakeProfitPercent=%.2f\n", config.StopLossPercent, config.TakeProfitPercent)
 	if config.StopLossPercent > 0 {
 		var stopLossPrice float64
+		// ⭐ Dựa vào POSITION type, không phải binanceSide
+		// LONG position (BUY to open): Stop Loss BELOW entry (sell when price drops)
+		// SHORT position (SELL to open): Stop Loss ABOVE entry (buy when price rises)
 		if binanceSide == "BUY" {
 			// LONG position: SL below entry
 			stopLossPrice = entryPrice * (1 - config.StopLossPercent/100)
 		} else {
 			// SHORT position: SL above entry
 			stopLossPrice = entryPrice * (1 + config.StopLossPercent/100)
+		}
+
+		// Validate: Stop Loss không được trigger ngay lập tức
+		currentMarkPrice, err := ts.GetMarkPrice(symbol)
+		if err != nil {
+			fmt.Printf("⚠️  Cannot get current mark price for validation: %v\n", err)
+		} else {
+			// Kiểm tra xem SL có trigger ngay không
+			var wouldTrigger bool
+			var reason string
+
+			if binanceSide == "BUY" {
+				// LONG: SL triggers when price <= stopLossPrice
+				if currentMarkPrice <= stopLossPrice {
+					wouldTrigger = true
+					reason = fmt.Sprintf("LONG position: Current price %.8f <= SL price %.8f", currentMarkPrice, stopLossPrice)
+				}
+			} else {
+				// SHORT: SL triggers when price >= stopLossPrice
+				if currentMarkPrice >= stopLossPrice {
+					wouldTrigger = true
+					reason = fmt.Sprintf("SHORT position: Current price %.8f >= SL price %.8f", currentMarkPrice, stopLossPrice)
+				}
+			}
+
+			if wouldTrigger {
+				errMsg := fmt.Sprintf("❌ STOP LOSS VALIDATION FAILED: %s. Order would immediately trigger!", reason)
+				fmt.Printf("\n%s\n", errMsg)
+				fmt.Printf("   Entry Price: %.8f\n", entryPrice)
+				fmt.Printf("   Current Mark Price: %.8f\n", currentMarkPrice)
+				fmt.Printf("   Stop Loss Price: %.8f\n", stopLossPrice)
+				fmt.Printf("   Stop Loss %%: %.2f%%\n", config.StopLossPercent)
+				fmt.Printf("   Position Type: %s\n", binanceSide)
+
+				// Return empty algo IDs (validation failed, don't place orders)
+				return "", ""
+			}
 		}
 
 		fmt.Printf("📊 Placing STOP LOSS:\n")
@@ -2303,4 +2403,36 @@ func (ts *TradingService) GetFuturesPosition(symbol string) (*FuturesPositionInf
 
 	fmt.Printf("❌ No position found for symbol %s\n", symbol)
 	return nil, nil
+}
+
+// CancelAllOrdersAndPosition cancels all orders and closes position for a symbol
+func (ts *TradingService) CancelAllOrdersAndPosition(config *models.TradingConfig, symbol string) error {
+	fmt.Printf("🔄 Starting cancellation process for %s\n", symbol)
+
+	// Step 1: Close any existing position
+	closeRes := ts.CloseFuturesPositionMarket(config, symbol)
+	if closeRes.Success {
+		fmt.Printf("✅ Closed existing position for %s\n", symbol)
+	} else if closeRes.Error != "no-position" { // no-position is not an error
+		fmt.Printf("⚠️  Failed to close existing position for %s: %s\n", symbol, closeRes.Error)
+	}
+
+	// Step 2: Cancel all open orders
+	cleanupErr := ts.CancelAllOpenOrders(config, symbol)
+	if cleanupErr != nil {
+		fmt.Printf("⚠️  Failed to cancel open orders for %s: %v\n", symbol, cleanupErr)
+	} else {
+		fmt.Printf("✅ Canceled all open orders for %s\n", symbol)
+	}
+
+	// Step 3: Cancel any existing Trailing Stop (ALGO) orders
+	err := ts.CancelAllTrailingStops(symbol)
+	if err != nil {
+		fmt.Printf("⚠️  Failed to cancel trailing stops for %s: %v\n", symbol, err)
+	} else {
+		fmt.Printf("✅ Canceled trailing stops for %s\n", symbol)
+	}
+
+	fmt.Printf("✅ Cancellation process completed for %s\n", symbol)
+	return nil
 }

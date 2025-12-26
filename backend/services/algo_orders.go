@@ -31,9 +31,12 @@ func (ts *TradingService) PlaceAlgoStopLoss(
 	params := url.Values{}
 	params.Set("algoType", "CONDITIONAL") // Bắt buộc
 	params.Set("symbol", symbol)
-	params.Set("side", strings.ToUpper(side))                  // SELL cho đóng LONG
-	params.Set("type", "STOP_MARKET")                          // type=STOP_MARKET
-	params.Set("triggerPrice", fmt.Sprintf("%.2f", stopPrice)) // triggerPrice + precision phù hợp ETHUSDT (tickSize 0.01)
+	params.Set("side", strings.ToUpper(side)) // SELL cho đóng LONG
+
+	// ⭐ Format triggerPrice với tickSize phù hợp cho từng symbol
+	stopPriceStr := ts.FormatPriceByTickSize(symbol, stopPrice)
+	params.Set("triggerPrice", stopPriceStr)
+	params.Set("type", "STOP_MARKET") // type=STOP_MARKET
 
 	params.Set("closePosition", "true") // Đóng toàn bộ vị thế khi trigger
 	// ⭐ positionSide: Chỉ gửi nếu tài khoản đang ở Hedge Mode
@@ -142,9 +145,12 @@ func (ts *TradingService) PlaceAlgoTakeProfit(
 	params := url.Values{}
 	params.Set("algoType", "CONDITIONAL") // Bắt buộc
 	params.Set("symbol", symbol)
-	params.Set("side", strings.ToUpper(side))                        // SELL cho đóng LONG, BUY cho đóng SHORT
-	params.Set("type", "TAKE_PROFIT_MARKET")                         // type=TAKE_PROFIT_MARKET
-	params.Set("triggerPrice", fmt.Sprintf("%.2f", takeProfitPrice)) // triggerPrice với precision phù hợp
+	params.Set("side", strings.ToUpper(side)) // SELL cho đóng LONG, BUY cho đóng SHORT
+	params.Set("type", "TAKE_PROFIT_MARKET")  // type=TAKE_PROFIT_MARKET
+
+	// ⭐ Format triggerPrice với tickSize phù hợp cho từng symbol
+	takeProfitPriceStr := ts.FormatPriceByTickSize(symbol, takeProfitPrice)
+	params.Set("triggerPrice", takeProfitPriceStr)
 
 	params.Set("closePosition", "true") // Đóng toàn bộ vị thế khi trigger
 	// ⭐ positionSide: Chỉ gửi nếu tài khoản đang ở Hedge Mode

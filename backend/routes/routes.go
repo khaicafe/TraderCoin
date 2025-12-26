@@ -75,10 +75,11 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 		orders := v1.Group("/orders")
 		orders.Use(middleware.AuthMiddleware())
 		{
-			orders.GET("", controllers.GetOrders(services))                    // List all orders
-			orders.GET("/history", controllers.GetOrderHistory(services))      // Get order history with filtering
-			orders.GET("/completed", controllers.GetCompletedOrders(services)) // Get completed orders (filled/closed)
-			orders.GET("/:id", controllers.GetOrder(services))                 // Get single order
+			orders.GET("", controllers.GetOrders(services))                      // List all orders
+			orders.GET("/history", controllers.GetOrderHistory(services))        // Get order history with filtering
+			orders.GET("/completed", controllers.GetCompletedOrders(services))   // Get completed orders (filled/closed)
+			orders.GET("/:id", controllers.GetOrder(services))                   // Get single order
+			orders.POST("/close/:id", controllers.CloseOrdersBySymbol(services)) // Close all orders and position by symbol
 		}
 
 		// ============ MONITORING ROUTES ============

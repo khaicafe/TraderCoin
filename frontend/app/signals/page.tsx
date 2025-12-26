@@ -771,19 +771,32 @@ export default function SignalsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="space-y-1">
-                        {signal.stop_loss > 0 && (
-                          <div className="text-red-600">
-                            SL: ${signal.stop_loss.toFixed(2)}
-                          </div>
-                        )}
-                        {signal.take_profit > 0 && (
-                          <div className="text-green-600">
-                            TP: ${signal.take_profit.toFixed(2)}
-                          </div>
-                        )}
-                        {signal.stop_loss === 0 && signal.take_profit === 0 && (
-                          <span className="text-gray-400">-</span>
-                        )}
+                        {(() => {
+                          const selectedConfig = botConfigs.find(
+                            (c) => c.id === selectedBotConfig,
+                          );
+                          if (selectedConfig) {
+                            return (
+                              <>
+                                {selectedConfig.stop_loss_percent > 0 && (
+                                  <div className="text-red-600 font-semibold">
+                                    SL: {selectedConfig.stop_loss_percent}%
+                                  </div>
+                                )}
+                                {selectedConfig.take_profit_percent > 0 && (
+                                  <div className="text-green-600 font-semibold">
+                                    TP: {selectedConfig.take_profit_percent}%
+                                  </div>
+                                )}
+                                {selectedConfig.stop_loss_percent === 0 &&
+                                  selectedConfig.take_profit_percent === 0 && (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                              </>
+                            );
+                          }
+                          return <span className="text-gray-400">-</span>;
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">

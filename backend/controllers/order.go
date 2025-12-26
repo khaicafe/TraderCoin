@@ -16,7 +16,9 @@ import (
 // OrderResponse represents the API response for an order with additional fields
 type OrderResponse struct {
 	models.Order
-	BotConfigName string `json:"bot_config_name"`
+	BotConfigName     string  `json:"bot_config_name"`
+	StopLossPercent   float64 `json:"stop_loss_percent,omitempty"`
+	TakeProfitPercent float64 `json:"take_profit_percent,omitempty"`
 }
 
 // GetOrderHistory - Lấy danh sách order history với filtering
@@ -98,10 +100,12 @@ func GetOrderHistory(services *services.Services) gin.HandlerFunc {
 		// No status checking here - background worker handles it
 		result := make([]OrderResponse, 0, len(orders))
 		for _, order := range orders {
-			botConfigName := getBotConfigName(services.DB, order)
+			botConfigName, stopLossPercent, takeProfitPercent := getBotConfigInfo(services.DB, order)
 			result = append(result, OrderResponse{
-				Order:         order,
-				BotConfigName: botConfigName,
+				Order:             order,
+				BotConfigName:     botConfigName,
+				StopLossPercent:   stopLossPercent,
+				TakeProfitPercent: takeProfitPercent,
 			})
 		}
 
@@ -147,10 +151,12 @@ func GetOrders(services *services.Services) gin.HandlerFunc {
 		// Build response with bot_config_name
 		result := make([]OrderResponse, 0, len(orders))
 		for _, order := range orders {
-			botConfigName := getBotConfigName(services.DB, order)
+			botConfigName, stopLossPercent, takeProfitPercent := getBotConfigInfo(services.DB, order)
 			result = append(result, OrderResponse{
-				Order:         order,
-				BotConfigName: botConfigName,
+				Order:             order,
+				BotConfigName:     botConfigName,
+				StopLossPercent:   stopLossPercent,
+				TakeProfitPercent: takeProfitPercent,
 			})
 		}
 
@@ -183,11 +189,13 @@ func GetOrder(services *services.Services) gin.HandlerFunc {
 		}
 
 		// Get bot config name
-		botConfigName := getBotConfigName(services.DB, order)
+		botConfigName, stopLossPercent, takeProfitPercent := getBotConfigInfo(services.DB, order)
 
 		c.JSON(http.StatusOK, OrderResponse{
-			Order:         order,
-			BotConfigName: botConfigName,
+			Order:             order,
+			BotConfigName:     botConfigName,
+			StopLossPercent:   stopLossPercent,
+			TakeProfitPercent: takeProfitPercent,
 		})
 	}
 }
@@ -264,10 +272,12 @@ func GetCompletedOrders(services *services.Services) gin.HandlerFunc {
 		// Build response with bot_config_name
 		result := make([]OrderResponse, 0, len(orders))
 		for _, order := range orders {
-			botConfigName := getBotConfigName(services.DB, order)
+			botConfigName, stopLossPercent, takeProfitPercent := getBotConfigInfo(services.DB, order)
 			result = append(result, OrderResponse{
-				Order:         order,
-				BotConfigName: botConfigName,
+				Order:             order,
+				BotConfigName:     botConfigName,
+				StopLossPercent:   stopLossPercent,
+				TakeProfitPercent: takeProfitPercent,
 			})
 		}
 
@@ -276,29 +286,113 @@ func GetCompletedOrders(services *services.Services) gin.HandlerFunc {
 }
 
 // getBotConfigName - Helper function để lấy bot config name
-func getBotConfigName(db *gorm.DB, order models.Order) string {
+// getBotConfigInfo returns bot config name and SL/TP percentages
+func getBotConfigInfo(db *gorm.DB, order models.Order) (string, float64, float64) {
 	// If no bot config ID, return default
 	if order.BotConfigID == 0 {
-		return order.Exchange + " - " + order.Symbol
+		return order.Exchange + " - " + order.Symbol, 0, 0
 	}
 
 	var config models.TradingConfig
 	err := db.Where("id = ?", order.BotConfigID).First(&config).Error
 	if err != nil {
 		// Fallback if bot config not found
-		return order.Exchange + " - " + order.Symbol
+		return order.Exchange + " - " + order.Symbol, 0, 0
 	}
 
-	// Return name if exists, otherwise format: "Exchange - Symbol"
+	// Get name
+	name := ""
 	if config.Name != "" {
-		return config.Name
+		name = config.Name
+	} else {
+		// Capitalize first letter of exchange
+		exchange := config.Exchange
+		if len(exchange) > 0 && exchange[0] >= 'a' && exchange[0] <= 'z' {
+			exchange = string(exchange[0]-32) + exchange[1:]
+		}
+		name = exchange + " - " + config.Symbol
 	}
 
-	// Capitalize first letter of exchange
-	exchange := config.Exchange
-	if len(exchange) > 0 && exchange[0] >= 'a' && exchange[0] <= 'z' {
-		exchange = string(exchange[0]-32) + exchange[1:]
-	}
+	return name, config.StopLossPercent, config.TakeProfitPercent
+}
 
-	return exchange + " - " + config.Symbol
+// CloseOrdersBySymbol - Đóng tất cả lệnh và position của một symbol
+func CloseOrdersBySymbol(svc *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		// Get order ID from URL param
+		orderIDStr := c.Param("id")
+		orderID, err := strconv.ParseUint(orderIDStr, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
+			return
+		}
+
+		// Find the order
+		var order models.Order
+		if err := svc.DB.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+				return
+			}
+			log.Printf("Error finding order: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find order"})
+			return
+		}
+
+		// Get the trading config for this order
+		var config models.TradingConfig
+		if err := svc.DB.Where("id = ?", order.BotConfigID).First(&config).Error; err != nil {
+			log.Printf("Error finding trading config: %v", err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Trading config not found"})
+			return
+		}
+
+		// Decrypt API credentials
+		apiKey, apiSecret, err := GetDecryptedAPICredentials(&config)
+		if err != nil {
+			log.Printf("❌ Error decrypting API credentials: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt API credentials"})
+			return
+		}
+
+		// Debug logs
+		log.Printf("🔑 Decrypted API Key length: %d (first 10 chars: %s...)",
+			len(apiKey),
+			func() string {
+				if len(apiKey) > 10 {
+					return apiKey[:10]
+				}
+				return apiKey
+			}())
+		log.Printf("🔐 Decrypted API Secret length: %d", len(apiSecret))
+
+		// Create trading service with decrypted credentials
+		tradingService := services.NewTradingService(apiKey, apiSecret, config.Exchange)
+
+		// Log details before calling cancellation
+		log.Printf("🔴 CloseOrdersBySymbol - OrderID: %d, Symbol: %s, Exchange: %s, BotConfigID: %d",
+			orderID, order.Symbol, config.Exchange, order.BotConfigID)
+
+		// Call the cancellation function
+		if err := tradingService.CancelAllOrdersAndPosition(&config, order.Symbol); err != nil {
+			log.Printf("❌ Error canceling orders and position for symbol %s: %v", order.Symbol, err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to cancel orders and close position",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		log.Printf("✅ Successfully closed all orders and position for symbol: %s", order.Symbol)
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "Successfully closed all orders and position for " + order.Symbol,
+		})
+	}
 }

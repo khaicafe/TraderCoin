@@ -26,6 +26,13 @@ export default function TradingPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({show: false, message: '', type: 'success'});
+
   // Form fields
   const [symbol, setSymbol] = useState('');
   const [amount, setAmount] = useState('');
@@ -68,6 +75,7 @@ export default function TradingPage() {
       setLoading(false);
     }
   };
+  999;
 
   const handleSelectConfig = async (config: BotConfig) => {
     setSelectedConfig(config);
@@ -118,7 +126,14 @@ export default function TradingPage() {
 
   const handlePlaceOrder = async (side: 'buy' | 'sell') => {
     if (!selectedConfig) {
-      setError('Vui lòng chọn Bot Config');
+      setToast({
+        show: true,
+        message: 'Vui lòng chọn Bot Config',
+        type: 'error',
+      });
+      setTimeout(() => {
+        setToast({show: false, message: '', type: 'error'});
+      }, 3000);
       return;
     }
 
@@ -138,7 +153,14 @@ export default function TradingPage() {
 
       // Validate
       if (orderType === 'limit' && !price) {
-        setError('Vui lòng nhập giá cho lệnh Limit');
+        setToast({
+          show: true,
+          message: 'Vui lòng nhập giá cho lệnh Limit',
+          type: 'error',
+        });
+        setTimeout(() => {
+          setToast({show: false, message: '', type: 'error'});
+        }, 3000);
         setPlacing(false);
         return;
       }
@@ -148,13 +170,18 @@ export default function TradingPage() {
 
       // lệnh đặt vị thế
       const result = await placeOrder(orderData);
-      setSuccess(
-        `Đặt lệnh ${side.toUpperCase()} thành công!\n` +
-          `Order ID: ${result.order_id}\n` +
-          `Symbol: ${result.symbol}\n` +
-          `Amount: ${result.amount}\n` +
-          `Status: ${result.order_status}`,
-      );
+
+      // Show success toast
+      setToast({
+        show: true,
+        message: `Đặt lệnh ${side.toUpperCase()} thành công! Order ID: ${
+          result.order_id
+        }`,
+        type: 'success',
+      });
+      setTimeout(() => {
+        setToast({show: false, message: '', type: 'success'});
+      }, 3000);
 
       // Reset form
       setPrice('');
@@ -165,9 +192,17 @@ export default function TradingPage() {
       // }, 2000);
     } catch (err: any) {
       console.error('Error placing order:', err);
-      setError(
-        err.response?.data?.error || 'Không thể đặt lệnh. Vui lòng thử lại.',
-      );
+
+      // Show error toast
+      setToast({
+        show: true,
+        message:
+          err.response?.data?.error || 'Không thể đặt lệnh. Vui lòng thử lại.',
+        type: 'error',
+      });
+      setTimeout(() => {
+        setToast({show: false, message: '', type: 'error'});
+      }, 3000);
     } finally {
       setPlacing(false);
     }
@@ -427,22 +462,6 @@ export default function TradingPage() {
         </div>
       )}
 
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
-
-      {/* Success Alert */}
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-green-800 whitespace-pre-line">
-            {success}
-          </p>
-        </div>
-      )}
-
       {/* No Config Alert */}
       {botConfigs.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -686,6 +705,47 @@ export default function TradingPage() {
           </form>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-slideUp">
+          <div
+            className={`px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 ${
+              toast.type === 'success'
+                ? 'bg-green-500 text-white'
+                : 'bg-red-500 text-white'
+            }`}>
+            {toast.type === 'success' ? (
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            )}
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
