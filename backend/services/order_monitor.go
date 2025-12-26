@@ -292,6 +292,7 @@ func (oms *OrderMonitorService) notifyOrderUpdate(userID uint, orderID uint, ord
 			"pnl_percent":       position.PnlPercent,
 			"leverage":          position.Leverage,
 			"margin_type":       position.MarginType,
+			"isolated":          position.Isolated,
 			"isolated_margin":   position.IsolatedMargin,
 		}
 	}

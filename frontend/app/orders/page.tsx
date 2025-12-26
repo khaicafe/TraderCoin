@@ -24,6 +24,7 @@ interface OrderUpdateMessage {
       pnl_percent: number;
       leverage: number;
       margin_type: string;
+      isolated: boolean;
       isolated_margin: number;
     };
     timestamp?: number;
@@ -205,6 +206,7 @@ export default function OrdersPage() {
             status: data.status,
             has_position: !!data.position,
             position_data: data.position,
+            isolated: data.position?.isolated,
           });
 
           // Update specific order in state with position data
@@ -255,6 +257,7 @@ export default function OrdersPage() {
                       data.position.isolated_margin || '0',
                     ),
                     position_side: data.position.position_side || '',
+                    isolated: data.position.isolated || false,
                   }
                 : undefined,
               // Update PnL from position if available
@@ -594,31 +597,16 @@ export default function OrdersPage() {
                     ID
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Order ID
+                    Order Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Bot
+                    Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Symbol
+                    Trading Info
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Mode
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Side
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Entry
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Current
+                    Price / PnL
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Position
@@ -628,15 +616,6 @@ export default function OrdersPage() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     SL / TP
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    PnL / ROI
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Created
                   </th>
                 </tr>
               </thead>
@@ -655,100 +634,211 @@ export default function OrdersPage() {
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm">{order.id}</td>
-                      <td className="px-6 py-4 text-sm font-mono text-blue-600">
-                        {order.order_id || '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {order.bot_config_name || '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium">
-                        {formatSymbol(order.symbol)}
-                      </td>
                       <td className="px-6 py-4">
-                        <span className="px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 capitalize">
-                          {order.trading_mode || 'spot'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Created:
+                            </span>
+                            <span className="text-sm text-gray-600">
+                              {formatDate(order.created_at)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Order:
+                            </span>
+                            <span className="text-sm font-mono text-blue-600">
+                              {order.order_id || '-'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Bot:
+                            </span>
+                            <span className="text-sm text-gray-900">
+                              {order.bot_config_name || '-'}
+                            </span>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span
-                          className={`px-2 py-1 text-xs font-semibold rounded uppercase ${
-                            order.side === 'BUY'
+                          className={`px-2 py-1 text-xs font-semibold rounded capitalize ${
+                            ['filled', 'closed'].includes(
+                              order.status?.toLowerCase() ?? '',
+                            )
                               ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
+                              : order.status?.toLowerCase() === 'new'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : order.status?.toLowerCase() === 'cancelled'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
                           }`}>
-                          {order.side}
+                          {order.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm capitalize">
-                        {order.type}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5">
+                          {/* Symbol */}
+                          <span className="text-sm font-bold">
+                            {formatSymbol(order.symbol)}
+                          </span>
+                          {/* Badges */}
+                          <div className="flex gap-1 flex-wrap">
+                            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 capitalize">
+                              {order.trading_mode || 'spot'}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 text-xs font-semibold rounded uppercase ${
+                                order.side === 'BUY'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                              {order.side}
+                            </span>
+                            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-800 capitalize">
+                              {order.type}
+                            </span>
+                          </div>
+                          {/* Amount */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Amount:
+                            </span>
+                            <span className="text-sm font-bold text-gray-900">
+                              {order.quantity}
+                            </span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-bold">
-                        {order.quantity}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold">
-                        {(order.filled_price || order.price || 0).toFixed(5)}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {(() => {
-                          const status = order.status?.toLowerCase();
-                          const isFutures =
-                            order.trading_mode?.toLowerCase() === 'futures' ||
-                            order.trading_mode?.toLowerCase() === 'future';
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1">
+                          {/* Entry Price */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Entry:
+                            </span>
+                            <span className="text-sm font-bold text-gray-900">
+                              $
+                              {(order.filled_price || order.price || 0).toFixed(
+                                5,
+                              )}
+                            </span>
+                          </div>
+                          {/* Current Price */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500 font-medium">
+                              Current:
+                            </span>
+                            {(() => {
+                              const status = order.status?.toLowerCase();
+                              const isFutures =
+                                order.trading_mode?.toLowerCase() ===
+                                  'futures' ||
+                                order.trading_mode?.toLowerCase() === 'future';
 
-                          // Futures: Chỉ dừng cập nhật khi status = 'closed'
-                          // Spot: Dừng cập nhật khi status = 'filled' hoặc 'closed'
-                          const shouldStopUpdating = isFutures
-                            ? status === 'closed'
-                            : ['filled', 'closed'].includes(status ?? '');
+                              // Futures: Chỉ dừng cập nhật khi status = 'closed'
+                              // Spot: Dừng cập nhật khi status = 'filled' hoặc 'closed'
+                              const shouldStopUpdating = isFutures
+                                ? status === 'closed'
+                                : ['filled', 'closed'].includes(status ?? '');
 
-                          if (shouldStopUpdating && order.filled_price) {
-                            return (
-                              <span className="font-bold text-green-700">
-                                ${order.filled_price.toFixed(5)}
-                              </span>
-                            );
-                          }
+                              if (shouldStopUpdating && order.filled_price) {
+                                return (
+                                  <span className="text-sm font-bold text-green-700">
+                                    ${order.filled_price.toFixed(5)}
+                                  </span>
+                                );
+                              }
 
-                          const priceKey = isFutures
-                            ? `${order.symbol}_FUTURES`
-                            : order.symbol;
+                              const priceKey = isFutures
+                                ? `${order.symbol}_FUTURES`
+                                : order.symbol;
 
-                          if (realtimePrices[priceKey]) {
-                            return (
-                              <div className="flex flex-col">
-                                <span
-                                  className={`font-bold text-base animate-pulse ${
-                                    realtimePrices[priceKey].percent >= 0
-                                      ? 'text-green-600'
-                                      : 'text-red-600'
-                                  }`}>
-                                  ${realtimePrices[priceKey].price.toFixed(5)}
-                                </span>
-                                {/* <span
-                                  className={`text-xs ${
-                                    realtimePrices[priceKey].percent >= 0
-                                      ? 'text-green-500'
-                                      : 'text-red-500'
-                                  }`}>
-                                  {realtimePrices[priceKey].percent >= 0
-                                    ? '+'
-                                    : ''}
-                                  {realtimePrices[priceKey].percent.toFixed(2)}%
-                                </span> */}
-                              </div>
-                            );
-                          }
+                              if (realtimePrices[priceKey]) {
+                                return (
+                                  <span
+                                    className={`text-sm font-bold animate-pulse ${
+                                      realtimePrices[priceKey].percent >= 0
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                    }`}>
+                                    ${realtimePrices[priceKey].price.toFixed(5)}
+                                  </span>
+                                );
+                              }
 
-                          if (order.current_price) {
-                            return (
-                              <span className="font-semibold text-blue-600">
-                                ${order.current_price.toFixed(5)}
-                              </span>
-                            );
-                          }
+                              if (order.current_price) {
+                                return (
+                                  <span className="text-sm font-semibold text-blue-600">
+                                    ${order.current_price.toFixed(5)}
+                                  </span>
+                                );
+                              }
 
-                          return <span className="text-gray-400">-</span>;
-                        })()}
+                              return (
+                                <span className="text-sm text-gray-400">-</span>
+                              );
+                            })()}
+                          </div>
+                          {/* PnL / ROI */}
+                          <div className="flex items-center gap-1 mt-1 pt-1 border-t border-gray-200">
+                            <span className="text-xs text-gray-500 font-medium">
+                              PnL:
+                            </span>
+                            {(() => {
+                              // Ưu tiên dùng position data nếu có
+                              const positionPnl = order.position
+                                ?.unrealized_profit
+                                ? parseFloat(order.position.unrealized_profit)
+                                : null;
+                              const positionRoi = order.position?.pnl_percent
+                                ? parseFloat(order.position.pnl_percent)
+                                : null;
+
+                              const displayPnl =
+                                positionPnl !== null ? positionPnl : pnl;
+                              const displayRoi =
+                                positionRoi !== null ? positionRoi : roi;
+
+                              if (displayPnl === null && displayRoi === null) {
+                                return (
+                                  <span className="text-sm text-gray-400">
+                                    -
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  {displayPnl !== null && (
+                                    <span
+                                      className={`text-sm font-semibold ${
+                                        displayPnl >= 0
+                                          ? 'text-green-600'
+                                          : 'text-red-600'
+                                      } ${isOpen ? 'animate-pulse' : ''}`}>
+                                      {displayPnl >= 0 ? '+' : ''}$
+                                      {displayPnl.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {displayRoi !== null && (
+                                    <span
+                                      className={`text-xs font-medium ${
+                                        displayRoi >= 0
+                                          ? 'text-green-500'
+                                          : 'text-red-500'
+                                      }`}>
+                                      ({displayRoi >= 0 ? '+' : ''}
+                                      {displayRoi.toFixed(2)}%)
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
                       </td>
                       {/* Position Info - NEW */}
                       <td className="px-6 py-4 text-sm">
@@ -778,8 +868,20 @@ export default function OrdersPage() {
                               )}
                             </div>
                             {order.position.leverage && (
-                              <div className="text-xs text-purple-600 font-medium">
-                                {order.position.leverage}x
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-purple-600 font-medium">
+                                  {order.position.leverage}x
+                                </span>
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                    order.position.isolated
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                  {order.position.isolated
+                                    ? 'Isolated'
+                                    : 'Cross'}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -848,72 +950,6 @@ export default function OrdersPage() {
                         ) : (
                           '-'
                         )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded capitalize ${
-                            ['filled', 'closed'].includes(
-                              order.status?.toLowerCase() ?? '',
-                            )
-                              ? 'bg-green-100 text-green-800'
-                              : order.status?.toLowerCase() === 'new'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : order.status?.toLowerCase() === 'cancelled'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {(() => {
-                          // Ưu tiên dùng position data nếu có
-                          const positionPnl = order.position?.unrealized_profit
-                            ? parseFloat(order.position.unrealized_profit)
-                            : null;
-                          const positionRoi = order.position?.pnl_percent
-                            ? parseFloat(order.position.pnl_percent)
-                            : null;
-
-                          const displayPnl =
-                            positionPnl !== null ? positionPnl : pnl;
-                          const displayRoi =
-                            positionRoi !== null ? positionRoi : roi;
-
-                          if (displayPnl === null && displayRoi === null) {
-                            return <span className="text-gray-400">-</span>;
-                          }
-
-                          return (
-                            <div className="flex flex-col">
-                              {displayPnl !== null && (
-                                <span
-                                  className={`font-semibold text-base ${
-                                    displayPnl >= 0
-                                      ? 'text-green-600'
-                                      : 'text-red-600'
-                                  } ${isOpen ? 'animate-pulse' : ''}`}>
-                                  {displayPnl >= 0 ? '+' : ''}$
-                                  {displayPnl.toFixed(2)}
-                                </span>
-                              )}
-                              {displayRoi !== null && (
-                                <span
-                                  className={`text-xs font-medium ${
-                                    displayRoi >= 0
-                                      ? 'text-green-500'
-                                      : 'text-red-500'
-                                  }`}>
-                                  {displayRoi >= 0 ? '+' : ''}
-                                  {displayRoi.toFixed(2)}%
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {formatDate(order.created_at)}
                       </td>
                     </tr>
                   );

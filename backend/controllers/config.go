@@ -43,10 +43,15 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 			Amount                float64                  `json:"amount"`
 			TradingMode           string                   `json:"trading_mode"`
 			Leverage              int                      `json:"leverage"`
+			MarginMode            string                   `json:"margin_mode"` // ISOLATED or CROSSED
 			APIKey                string                   `json:"api_key"`
 			APISecret             string                   `json:"api_secret"`
 			StopLossPercent       float64                  `json:"stop_loss_percent" binding:"gte=0,lte=100"`    // Optional, 0 = không dùng SL
 			TakeProfitPercent     float64                  `json:"take_profit_percent" binding:"gte=0,lte=1000"` // Optional, 0 = không dùng TP
+			TrailingStopPercent   float64                  `json:"trailing_stop_percent"`
+			EnableTrailingStop    bool                     `json:"enable_trailing_stop"` // Enable/disable trailing stop
+			ActivationPrice       float64                  `json:"activation_price"`     // Activation price for trailing stop
+			CallbackRate          float64                  `json:"callback_rate"`        // Callback rate for trailing stop
 			TPLevels              []map[string]interface{} `json:"tp_levels"`
 			EnableTrailing        bool                     `json:"enable_trailing"`
 			TrailingType          string                   `json:"trailing_type"`
@@ -71,8 +76,13 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 		log.Printf("      - Amount: %.8f", input.Amount)
 		log.Printf("      - Trading Mode: %s", input.TradingMode)
 		log.Printf("      - Leverage: %d", input.Leverage)
+		log.Printf("      - Margin Mode: %s", input.MarginMode)
 		log.Printf("      - Stop Loss %%: %.2f", input.StopLossPercent)
 		log.Printf("      - Take Profit %%: %.2f", input.TakeProfitPercent)
+		log.Printf("      - Trailing Stop %%: %.2f", input.TrailingStopPercent)
+		log.Printf("      - Enable Trailing Stop: %t", input.EnableTrailingStop)
+		log.Printf("      - Activation Price: %.8f", input.ActivationPrice)
+		log.Printf("      - Callback Rate: %.2f", input.CallbackRate)
 		log.Printf("      - API Key provided: %t", input.APIKey != "")
 		log.Printf("      - API Secret provided: %t", input.APISecret != "")
 
@@ -109,6 +119,36 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 			log.Printf("✅ Step 6: Leverage %dx validated", input.Leverage)
 		}
 
+		// Validate margin mode
+		log.Printf("🔍 Step 6a: Validating margin mode...")
+		if input.MarginMode == "" {
+			input.MarginMode = "ISOLATED" // Default to ISOLATED
+			log.Printf("⚠️  Step 6a: Margin mode not provided, defaulting to 'ISOLATED'")
+		} else if input.MarginMode != "ISOLATED" && input.MarginMode != "CROSSED" {
+			input.MarginMode = "ISOLATED"
+			log.Printf("⚠️  Step 6a: Invalid margin mode '%s', defaulting to 'ISOLATED'", input.MarginMode)
+		} else {
+			log.Printf("✅ Step 6a: Margin mode '%s' validated", input.MarginMode)
+		}
+
+		// Validate callback rate
+		log.Printf("🔍 Step 6b: Validating callback rate...")
+		if input.CallbackRate < 0.1 || input.CallbackRate > 5 {
+			input.CallbackRate = 1.0 // Default to 1%
+			log.Printf("⚠️  Step 6b: Callback rate out of range (0.1-5), defaulting to 1.0%%")
+		} else {
+			log.Printf("✅ Step 6b: Callback rate %.2f%% validated", input.CallbackRate)
+		}
+
+		// Validate activation price
+		log.Printf("🔍 Step 6c: Validating activation price...")
+		if input.ActivationPrice < 0 {
+			input.ActivationPrice = 0 // Default to 0 (activate immediately)
+			log.Printf("⚠️  Step 6c: Negative activation price, defaulting to 0 (activate immediately)")
+		} else {
+			log.Printf("✅ Step 6c: Activation price %.8f validated", input.ActivationPrice)
+		}
+
 		// Encrypt API credentials if provided
 		log.Printf("🔐 Step 7: Encrypting API credentials...")
 		var encryptedAPIKey, encryptedAPISecret string
@@ -139,18 +179,23 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 		// Create trading config
 		log.Printf("💾 Step 8: Creating bot config in database...")
 		config := models.TradingConfig{
-			Name:              input.Name,
-			UserID:            user.ID,
-			Symbol:            input.Symbol,
-			Exchange:          input.Exchange,
-			Amount:            input.Amount,
-			TradingMode:       input.TradingMode,
-			Leverage:          input.Leverage,
-			APIKey:            encryptedAPIKey,
-			APISecret:         encryptedAPISecret,
-			StopLossPercent:   input.StopLossPercent,
-			TakeProfitPercent: input.TakeProfitPercent,
-			IsActive:          true, // Active by default
+			Name:                input.Name,
+			UserID:              user.ID,
+			Symbol:              input.Symbol,
+			Exchange:            input.Exchange,
+			Amount:              input.Amount,
+			TradingMode:         input.TradingMode,
+			Leverage:            input.Leverage,
+			MarginMode:          input.MarginMode,
+			APIKey:              encryptedAPIKey,
+			APISecret:           encryptedAPISecret,
+			StopLossPercent:     input.StopLossPercent,
+			TakeProfitPercent:   input.TakeProfitPercent,
+			TrailingStopPercent: input.TrailingStopPercent,
+			EnableTrailingStop:  input.EnableTrailingStop,
+			ActivationPrice:     input.ActivationPrice,
+			CallbackRate:        input.CallbackRate,
+			IsActive:            true, // Active by default
 		}
 
 		if err := services.DB.Create(&config).Error; err != nil {
@@ -167,9 +212,14 @@ func CreateBotConfig(services *services.Services) gin.HandlerFunc {
 		log.Printf("      - Exchange: %s", config.Exchange)
 		log.Printf("      - Trading Mode: %s", config.TradingMode)
 		log.Printf("      - Leverage: %dx", config.Leverage)
+		log.Printf("      - Margin Mode: %s", config.MarginMode)
 		log.Printf("      - Amount: %.8f", config.Amount)
 		log.Printf("      - Stop Loss: %.2f%%", config.StopLossPercent)
 		log.Printf("      - Take Profit: %.2f%%", config.TakeProfitPercent)
+		log.Printf("      - Trailing Stop: %.2f%%", config.TrailingStopPercent)
+		log.Printf("      - Enable Trailing Stop: %t", config.EnableTrailingStop)
+		log.Printf("      - Activation Price: %.8f", config.ActivationPrice)
+		log.Printf("      - Callback Rate: %.2f%%", config.CallbackRate)
 		log.Printf("      - Is Active: %t", config.IsActive)
 		log.Printf("      - Created At: %s", config.CreatedAt)
 
@@ -272,16 +322,21 @@ func UpdateBotConfig(services *services.Services) gin.HandlerFunc {
 
 		// Bind update data
 		var input struct {
-			Symbol            *string  `json:"symbol"`
-			Exchange          *string  `json:"exchange"`
-			Amount            *float64 `json:"amount"`
-			TradingMode       *string  `json:"trading_mode"`
-			Leverage          *int     `json:"leverage"`
-			APIKey            *string  `json:"api_key"`
-			APISecret         *string  `json:"api_secret"`
-			StopLossPercent   *float64 `json:"stop_loss_percent"`
-			TakeProfitPercent *float64 `json:"take_profit_percent"`
-			IsActive          *bool    `json:"is_active"`
+			Symbol              *string  `json:"symbol"`
+			Exchange            *string  `json:"exchange"`
+			Amount              *float64 `json:"amount"`
+			TradingMode         *string  `json:"trading_mode"`
+			Leverage            *int     `json:"leverage"`
+			MarginMode          *string  `json:"margin_mode"`
+			APIKey              *string  `json:"api_key"`
+			APISecret           *string  `json:"api_secret"`
+			StopLossPercent     *float64 `json:"stop_loss_percent"`
+			TakeProfitPercent   *float64 `json:"take_profit_percent"`
+			TrailingStopPercent *float64 `json:"trailing_stop_percent"`
+			EnableTrailingStop  *bool    `json:"enable_trailing_stop"`
+			ActivationPrice     *float64 `json:"activation_price"`
+			CallbackRate        *float64 `json:"callback_rate"`
+			IsActive            *bool    `json:"is_active"`
 		}
 
 		if err := c.ShouldBindJSON(&input); err != nil {
@@ -317,6 +372,13 @@ func UpdateBotConfig(services *services.Services) gin.HandlerFunc {
 			}
 			config.Leverage = *input.Leverage
 		}
+		if input.MarginMode != nil {
+			if *input.MarginMode != "ISOLATED" && *input.MarginMode != "CROSSED" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Margin mode must be 'ISOLATED' or 'CROSSED'"})
+				return
+			}
+			config.MarginMode = *input.MarginMode
+		}
 		if input.APIKey != nil {
 			encryptedKey, err := utils.EncryptString(*input.APIKey)
 			if err != nil {
@@ -348,6 +410,30 @@ func UpdateBotConfig(services *services.Services) gin.HandlerFunc {
 				return
 			}
 			config.TakeProfitPercent = *input.TakeProfitPercent
+		}
+		if input.TrailingStopPercent != nil {
+			if *input.TrailingStopPercent < 0 || *input.TrailingStopPercent > 100 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Trailing stop must be between 0 and 100"})
+				return
+			}
+			config.TrailingStopPercent = *input.TrailingStopPercent
+		}
+		if input.EnableTrailingStop != nil {
+			config.EnableTrailingStop = *input.EnableTrailingStop
+		}
+		if input.ActivationPrice != nil {
+			if *input.ActivationPrice < 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Activation price must be greater than or equal to 0"})
+				return
+			}
+			config.ActivationPrice = *input.ActivationPrice
+		}
+		if input.CallbackRate != nil {
+			if *input.CallbackRate < 0.1 || *input.CallbackRate > 5 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Callback rate must be between 0.1 and 5"})
+				return
+			}
+			config.CallbackRate = *input.CallbackRate
 		}
 		if input.IsActive != nil {
 			config.IsActive = *input.IsActive

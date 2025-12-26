@@ -9,8 +9,13 @@ export interface BotConfig {
   amount?: number;
   trading_mode?: string;
   leverage?: number;
+  margin_mode?: string;
   stop_loss_percent: number;
   take_profit_percent: number;
+  trailing_stop_percent?: number;
+  enable_trailing_stop?: boolean;
+  activation_price?: number;
+  callback_rate?: number;
   is_default?: boolean;
   is_active: boolean;
   created_at: string;
@@ -24,10 +29,15 @@ export interface BotConfigCreate {
   amount?: number;
   trading_mode?: string;
   leverage?: number;
+  margin_mode?: string;
   api_key?: string;
   api_secret?: string;
   stop_loss_percent: number;
   take_profit_percent: number;
+  trailing_stop_percent?: number;
+  enable_trailing_stop?: boolean;
+  activation_price?: number;
+  callback_rate?: number;
 }
 
 export interface BotConfigUpdate {
@@ -36,10 +46,15 @@ export interface BotConfigUpdate {
   amount?: number;
   trading_mode?: string;
   leverage?: number;
+  margin_mode?: string;
   api_key?: string;
   api_secret?: string;
   stop_loss_percent?: number;
   take_profit_percent?: number;
+  trailing_stop_percent?: number;
+  enable_trailing_stop?: boolean;
+  activation_price?: number;
+  callback_rate?: number;
   is_active?: boolean;
 }
 

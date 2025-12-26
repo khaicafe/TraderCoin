@@ -34,6 +34,7 @@ export interface Order {
     pnl_percent?: string;
     leverage?: string;
     margin_type?: string;
+    isolated?: boolean;
     isolated_margin?: string;
     position_side?: string;
   };

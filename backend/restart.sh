@@ -7,6 +7,6 @@ sleep 1
 
 # Start new backend
 echo "🚀 Starting new backend..."
-cd /Users/khaicafe/Develop/TraderCoin/backend
-./tradercoin
+cd /Users/khaicafe/Develop/TraderCoin/Backend
+./backend
 

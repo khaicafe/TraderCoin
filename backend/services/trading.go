@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -180,8 +181,12 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 		// }
 
 		////////// STEP 1: Set Margin Mode (ISOLATED or CROSSED) - only once per symbol
-		if err := ts.SetMarginType(config, symbol, "ISOLATED"); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to set margin type: %v\n", err)
+		marginMode := config.MarginMode
+		if marginMode == "" {
+			marginMode = "ISOLATED" // Default to ISOLATED if not set
+		}
+		if err := ts.SetMarginType(config, symbol, marginMode); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to set margin type to %s: %v\n", marginMode, err)
 			// Don't fail here, continue with order placement
 		}
 
@@ -389,12 +394,13 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 	}
 
 	//////////// Đặt trailing stop nếu có cấu hình trong bot (chỉ cho Futures) //////////
-	if tradingMode == "futures" && config.TrailingStopPercent > 0 {
+	if tradingMode == "futures" && config.CallbackRate > 0 {
 		fmt.Printf("📊 Placing TRAILING STOP:\n")
-		fmt.Printf("   Trailing Stop %%: %.2f%%\n", config.TrailingStopPercent)
+		fmt.Printf("   Callback Rate: %.2f%%\n", config.CallbackRate)
+		fmt.Printf("   Activation Price %%: %.2f%%\n", config.ActivationPrice)
 		fmt.Printf("   Side: %s\n\n", binanceSide)
 
-		ts.PlaceTrailingStopOrder(config, symbol, config.TrailingStopPercent, quantity, binanceSide)
+		ts.PlaceTrailingStopOrder(config, symbol, quantity, binanceSide, filledPrice, orderPrice)
 	}
 
 	return OrderResult{
@@ -510,6 +516,7 @@ func (ts *TradingService) placeAutoTPSL(
 	}
 
 	// Place Stop Loss if configured
+	fmt.Printf("\n🔍 DEBUG BEFORE SL: StopLossPercent=%.2f, TakeProfitPercent=%.2f\n", config.StopLossPercent, config.TakeProfitPercent)
 	if config.StopLossPercent > 0 {
 		var stopLossPrice float64
 		if binanceSide == "BUY" {
@@ -535,41 +542,32 @@ func (ts *TradingService) placeAutoTPSL(
 		}
 	}
 
-	// Place Trailing Stop if configured (Futures only)
-	// if config.TrailingStopPercent > 0 {
-	// 	fmt.Printf("📊 Placing TRAILING STOP:\n")
-	// 	fmt.Printf("   Entry Price: %.8f\n", entryPrice)
-	// 	fmt.Printf("   Trailing Stop %%: %.2f%%\n", config.TrailingStopPercent)
-	// 	fmt.Printf("   Side: %s\n\n", binanceSide)
-
-	// 	tsResult := ts.PlaceTrailingStopOrder(config, symbol, config.TrailingStopPercent, quantity, binanceSide)
-	// 	if !tsResult.Success {
-	// 		fmt.Printf("⚠️  Failed to place Trailing Stop: %s\n\n", tsResult.Error)
-	// 	}
-	// }
-
 	// Place Take Profit if configured
-	// if config.TakeProfitPercent > 0 {
-	// 	var takeProfitPrice float64
-	// 	if binanceSide == "BUY" {
-	// 		// LONG position: TP above entry
-	// 		takeProfitPrice = entryPrice * (1 + config.TakeProfitPercent/100)
-	// 	} else {
-	// 		// SHORT position: TP below entry
-	// 		takeProfitPrice = entryPrice * (1 - config.TakeProfitPercent/100)
-	// 	}
+	fmt.Printf("🔍 DEBUG: TakeProfitPercent = %.2f (should be > 0 to place TP)\n", config.TakeProfitPercent)
+	if config.TakeProfitPercent > 0 {
+		var takeProfitPrice float64
+		if binanceSide == "BUY" {
+			// LONG position: TP above entry
+			takeProfitPrice = entryPrice * (1 + config.TakeProfitPercent/100)
+		} else {
+			// SHORT position: TP below entry
+			takeProfitPrice = entryPrice * (1 - config.TakeProfitPercent/100)
+		}
 
-	// 	fmt.Printf("📊 Placing TAKE PROFIT:\n")
-	// 	fmt.Printf("   Entry Price: %.8f\n", entryPrice)
-	// 	fmt.Printf("   Take Profit %%: %.2f%%\n", config.TakeProfitPercent)
-	// 	fmt.Printf("   Take Profit Price: %.8f\n", takeProfitPrice)
-	// 	fmt.Printf("   Side: %s\n\n", closeSide)
+		fmt.Printf("📊 Placing TAKE PROFIT:\n")
+		fmt.Printf("   Entry Price: %.8f\n", entryPrice)
+		fmt.Printf("   Take Profit %%: %.2f%%\n", config.TakeProfitPercent)
+		fmt.Printf("   Take Profit Price: %.8f\n", takeProfitPrice)
+		fmt.Printf("   Side: %s\n\n", closeSide)
 
-	// 	tpResult := ts.PlaceTakeProfitOrder(config, symbol, takeProfitPrice, quantity, closeSide)
-	// 	if !tpResult.Success {
-	// 		fmt.Printf("⚠️  Failed to place Take Profit: %s\n\n", tpResult.Error)
-	// 	}
-	// }
+		tpResult := ts.PlaceTakeProfitOrder(config, symbol, takeProfitPrice, quantity, closeSide)
+		if !tpResult.Success {
+			fmt.Printf("⚠️  Failed to place Take Profit: %s\n\n", tpResult.Error)
+		} else {
+			algoIDTakeProfit = tpResult.OrderID
+			fmt.Printf("✅ algoID Take Profit: %s\n\n", tpResult.OrderID)
+		}
+	}
 
 	return algoIDStopLoss, algoIDTakeProfit
 }
@@ -872,13 +870,39 @@ func (ts *TradingService) PlaceTakeProfitOrder(config *models.TradingConfig, sym
 func (ts *TradingService) PlaceTrailingStopOrder(
 	config *models.TradingConfig,
 	symbol string,
-	trailingStopPercent float64, // ví dụ 1.5 cho 1.5%
 	quantity float64, // số lượng cần đóng (bắt buộc cho Trailing Stop)
 	side string, // side của vị thế mở: "BUY" (LONG) hoặc "SELL" (SHORT)
+	filledPrice float64,
+	orderPrice float64,
 ) OrderResult {
 
 	if ts.Exchange != "binance" || config.TradingMode != "futures" {
 		return OrderResult{Success: false, Error: "Trailing stop only supported on Binance Futures"}
+	}
+
+	// Lấy callback rate từ config
+	callbackRate := config.CallbackRate
+	if callbackRate <= 0 {
+		callbackRate = 1.0 // Default 1%
+	}
+
+	// Tính activation price từ phần trăm trong config
+	var activatePrice float64
+	if config.ActivationPrice > 0 {
+		// Sử dụng filled price hoặc order price làm entry
+		entryPrice := filledPrice
+		if entryPrice == 0 {
+			entryPrice = orderPrice
+		}
+
+		// Tính activation price dựa trên phần trăm và side
+		if strings.ToUpper(side) == "BUY" {
+			// LONG position: activation price phía trên entry
+			activatePrice = entryPrice * (1 + config.ActivationPrice/100)
+		} else {
+			// SHORT position: activation price phía dưới entry
+			activatePrice = entryPrice * (1 - config.ActivationPrice/100)
+		}
 	}
 
 	adapter := GetExchangeAdapter("binance", false).(*BinanceAdapter)
@@ -897,12 +921,13 @@ func (ts *TradingService) PlaceTrailingStopOrder(
 	params.Set("side", closeSide)
 	params.Set("type", "TRAILING_STOP_MARKET") // type đúng
 
-	params.Set("callbackRate", fmt.Sprintf("%.2f", trailingStopPercent)) // 1.0 = 1%, min 0.1 max 10
+	params.Set("callbackRate", fmt.Sprintf("%.2f", callbackRate)) // 1.0 = 1%, min 0.1 max 10
 
-	// activationPrice (tên đúng trong docs là activatePrice, không phải activationPrice)
-	// Nếu không gửi, default = giá hiện tại (tốt nhất cho trailing ngay lập tức)
-	// Nếu muốn delay activation, gửi giá cụ thể (ví dụ cao hơn cho SELL trailing)
-	// params.Set("activatePrice", fmt.Sprintf("%.2f", currentPrice))
+	// Set activation price nếu có
+	if activatePrice > 0 {
+		params.Set("activatePrice", fmt.Sprintf("%.2f", activatePrice))
+		fmt.Printf("   Calculated Activate Price: %.2f (from %.2f%% of entry)\n", activatePrice, config.ActivationPrice)
+	}
 
 	params.Set("quantity", fmt.Sprintf("%.8f", quantity)) // ⭐ Bắt buộc quantity cho TRAILING_STOP_MARKET
 	params.Set("reduceOnly", "TRUE")                      // ⭐ Thêm dòng này
@@ -2158,6 +2183,7 @@ type FuturesPositionInfo struct {
 	LiquidationPrice float64 `json:"liquidation_price"` // Liquidation price
 	Leverage         int     `json:"leverage"`          // Leverage
 	MarginType       string  `json:"margin_type"`       // ISOLATED or CROSS
+	Isolated         bool    `json:"isolated"`          // true if isolated margin, false if cross margin
 	IsolatedMargin   float64 `json:"isolated_margin"`   // Margin for isolated position
 	PositionSide     string  `json:"position_side"`     // BOTH, LONG, or SHORT
 	PnlPercent       float64 `json:"pnl_percent"`       // PnL percentage
@@ -2191,6 +2217,13 @@ func (ts *TradingService) GetFuturesPosition(symbol string) (*FuturesPositionInf
 
 	body, _ := io.ReadAll(resp.Body)
 
+	// 🔍 LOG RESPONSE JSON TỪ BINANCE
+	log.Printf("\n🔍 ===== BINANCE POSITION RISK API RESPONSE =====")
+	log.Printf("URL: %s", fullURL)
+	log.Printf("Status Code: %d", resp.StatusCode)
+	log.Printf("Raw JSON Response:\n%s", string(body))
+	log.Printf("================================================\n")
+
 	if resp.StatusCode != http.StatusOK {
 		var errorResp map[string]interface{}
 		_ = json.Unmarshal(body, &errorResp)
@@ -2206,6 +2239,7 @@ func (ts *TradingService) GetFuturesPosition(symbol string) (*FuturesPositionInf
 		LiquidationPrice string `json:"liquidationPrice"`
 		Leverage         string `json:"leverage"`
 		MarginType       string `json:"marginType"`
+		Isolated         bool   `json:"isolated"`
 		IsolatedMargin   string `json:"isolatedMargin"`
 		PositionSide     string `json:"positionSide"`
 	}
@@ -2259,6 +2293,7 @@ func (ts *TradingService) GetFuturesPosition(symbol string) (*FuturesPositionInf
 				LiquidationPrice: liqPrice,
 				Leverage:         leverage,
 				MarginType:       pos.MarginType,
+				Isolated:         pos.Isolated,
 				IsolatedMargin:   isolatedMargin,
 				PositionSide:     pos.PositionSide,
 				PnlPercent:       pnlPercent,

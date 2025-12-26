@@ -50,13 +50,17 @@ type TradingConfig struct {
 	Exchange            string         `gorm:"not null;size:50" json:"exchange"`
 	Symbol              string         `gorm:"not null;size:50" json:"symbol"`
 	Amount              float64        `gorm:"type:decimal(10,2)" json:"amount"`
-	TradingMode         string         `gorm:"size:20;default:'spot'" json:"trading_mode"` // spot, futures, margin
-	Leverage            int            `gorm:"default:1" json:"leverage"`                  // Leverage for futures/margin trading (1-125)
-	APIKey              string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
-	APISecret           string         `gorm:"size:255" json:"-"`                          // Not exposed in JSON for security
+	TradingMode         string         `gorm:"size:20;default:'spot'" json:"trading_mode"`    // spot, futures, margin
+	Leverage            int            `gorm:"default:1" json:"leverage"`                     // Leverage for futures/margin trading (1-125)
+	MarginMode          string         `gorm:"size:20;default:'ISOLATED'" json:"margin_mode"` // ISOLATED, CROSSED (for futures)
+	APIKey              string         `gorm:"size:255" json:"-"`                             // Not exposed in JSON for security
+	APISecret           string         `gorm:"size:255" json:"-"`                             // Not exposed in JSON for security
 	StopLossPercent     float64        `gorm:"type:decimal(10,2)" json:"stop_loss_percent"`
 	TakeProfitPercent   float64        `gorm:"type:decimal(10,2)" json:"take_profit_percent"`
 	TrailingStopPercent float64        `gorm:"type:decimal(10,2);default:0" json:"trailing_stop_percent"` // Trailing stop for futures
+	EnableTrailingStop  bool           `gorm:"default:false" json:"enable_trailing_stop"`                 // Enable/disable trailing stop
+	ActivationPrice     float64        `gorm:"type:decimal(20,8);default:0" json:"activation_price"`      // Activation price for trailing stop
+	CallbackRate        float64        `gorm:"type:decimal(10,2);default:1" json:"callback_rate"`         // Callback rate for trailing stop (0.1-5%)
 	IsDefault           bool           `gorm:"default:false" json:"is_default"`                           // Only one default bot per user
 	IsActive            bool           `gorm:"default:true" json:"is_active"`
 	CreatedAt           time.Time      `json:"created_at"`

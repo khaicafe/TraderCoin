@@ -11,6 +11,7 @@ import {
   BotConfigCreate,
 } from '../../services/botConfigService';
 import {getSymbols, Symbol} from '../../services/symbolService';
+import TPTrailingStopGuide from '../../components/TPTrailingStopGuide';
 
 export default function BotConfigsPage() {
   const [bots, setBots] = useState<BotConfig[]>([]);
@@ -34,6 +35,10 @@ export default function BotConfigsPage() {
   const [tradingModeSearch, setTradingModeSearch] = useState('');
   const [showTradingModeDropdown, setShowTradingModeDropdown] = useState(false);
 
+  // Margin Mode state
+  const [marginModeSearch, setMarginModeSearch] = useState('');
+  const [showMarginModeDropdown, setShowMarginModeDropdown] = useState(false);
+
   const exchanges = [
     {
       value: 'binance',
@@ -49,17 +54,27 @@ export default function BotConfigsPage() {
     {value: 'margin', label: 'Margin', description: 'Giao dịch ký quỹ'},
   ];
 
+  const marginModes = [
+    {value: 'ISOLATED', label: 'Isolated', description: 'Ký quỹ cô lập'},
+    {value: 'CROSSED', label: 'Crossed', description: 'Ký quỹ chéo'},
+  ];
+
   const initialFormData = {
     name: '',
     symbol: '',
     exchange: 'binance',
     trading_mode: 'spot',
     leverage: '1',
+    margin_mode: 'ISOLATED',
     amount: '',
     api_key: '',
     api_secret: '',
     stop_loss_percent: '',
     take_profit_percent: '',
+    trailing_stop_percent: '0',
+    enable_trailing_stop: false,
+    activation_price: '0',
+    callback_rate: '1',
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -106,6 +121,13 @@ export default function BotConfigsPage() {
       mode.value.toLowerCase().includes(tradingModeSearch.toLowerCase()),
   );
 
+  // Filter margin modes based on search
+  const filteredMarginModes = marginModes.filter(
+    (mode) =>
+      mode.label.toLowerCase().includes(marginModeSearch.toLowerCase()) ||
+      mode.value.toLowerCase().includes(marginModeSearch.toLowerCase()),
+  );
+
   useEffect(() => {
     // Check for token before fetching
     const token = localStorage.getItem('token');
@@ -150,15 +172,26 @@ export default function BotConfigsPage() {
       setShowSymbolDropdown(false);
       setShowExchangeDropdown(false);
       setShowTradingModeDropdown(false);
+      setShowMarginModeDropdown(false);
     };
-    if (showSymbolDropdown || showExchangeDropdown || showTradingModeDropdown) {
+    if (
+      showSymbolDropdown ||
+      showExchangeDropdown ||
+      showTradingModeDropdown ||
+      showMarginModeDropdown
+    ) {
       // Use setTimeout to avoid immediate trigger
       setTimeout(() => {
         document.addEventListener('click', handleClickOutside);
       }, 0);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [showSymbolDropdown, showExchangeDropdown, showTradingModeDropdown]);
+  }, [
+    showSymbolDropdown,
+    showExchangeDropdown,
+    showTradingModeDropdown,
+    showMarginModeDropdown,
+  ]);
 
   const handleOpenModal = (bot: BotConfig | null = null) => {
     if (bot) {
@@ -169,6 +202,7 @@ export default function BotConfigsPage() {
         exchange: bot.exchange,
         trading_mode: bot.trading_mode || 'spot',
         leverage: bot.leverage ? String(bot.leverage) : '1',
+        margin_mode: bot.margin_mode || 'ISOLATED',
         amount:
           bot.amount !== undefined && bot.amount !== null
             ? String(bot.amount)
@@ -177,6 +211,14 @@ export default function BotConfigsPage() {
         api_secret: '', // Not stored in response for security
         stop_loss_percent: String(bot.stop_loss_percent),
         take_profit_percent: String(bot.take_profit_percent),
+        trailing_stop_percent: bot.trailing_stop_percent
+          ? String(bot.trailing_stop_percent)
+          : '0',
+        enable_trailing_stop: bot.enable_trailing_stop || false,
+        activation_price: bot.activation_price
+          ? String(bot.activation_price)
+          : '0',
+        callback_rate: bot.callback_rate ? String(bot.callback_rate) : '1',
       });
     } else {
       setEditingBot(null);
@@ -188,6 +230,8 @@ export default function BotConfigsPage() {
     setShowExchangeDropdown(false);
     setTradingModeSearch('');
     setShowTradingModeDropdown(false);
+    setMarginModeSearch('');
+    setShowMarginModeDropdown(false);
     setShowModal(true);
   };
 
@@ -201,6 +245,8 @@ export default function BotConfigsPage() {
     setShowExchangeDropdown(false);
     setTradingModeSearch('');
     setShowTradingModeDropdown(false);
+    setMarginModeSearch('');
+    setShowMarginModeDropdown(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -212,11 +258,22 @@ export default function BotConfigsPage() {
         exchange: formData.exchange,
         trading_mode: formData.trading_mode,
         leverage: formData.leverage ? parseInt(formData.leverage) : undefined,
+        margin_mode: formData.margin_mode,
         amount: formData.amount ? parseFloat(formData.amount) : undefined,
         api_key: formData.api_key || undefined,
         api_secret: formData.api_secret || undefined,
         stop_loss_percent: parseFloat(formData.stop_loss_percent),
         take_profit_percent: parseFloat(formData.take_profit_percent),
+        trailing_stop_percent: formData.trailing_stop_percent
+          ? parseFloat(formData.trailing_stop_percent)
+          : undefined,
+        enable_trailing_stop: formData.enable_trailing_stop,
+        activation_price: formData.activation_price
+          ? parseFloat(formData.activation_price)
+          : undefined,
+        callback_rate: formData.callback_rate
+          ? parseFloat(formData.callback_rate)
+          : undefined,
       };
 
       if (editingBot) {
@@ -534,6 +591,16 @@ export default function BotConfigsPage() {
               </button>
             </div>
 
+            {/* Hướng dẫn TP + Trailing Stop */}
+            <div className="px-6 pt-4">
+              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  💡 Bạn muốn hiểu rõ cách TP và Trailing Stop hoạt động?
+                </span>
+                <TPTrailingStopGuide />
+              </div>
+            </div>
+
             {/* Modal Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* Name */}
@@ -552,7 +619,6 @@ export default function BotConfigsPage() {
                   required
                 />
               </div>
-
               {/* Exchange & Symbol - 2 columns */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Sàn Giao Dịch */}
@@ -685,7 +751,6 @@ export default function BotConfigsPage() {
                   )}
                 </div>
               </div>
-
               {/* Trading Mode & Leverage - 2 columns */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Trading Mode */}
@@ -780,7 +845,172 @@ export default function BotConfigsPage() {
                   <p className="text-xs text-gray-500 mt-1">Đòn bẩy 1x-125x</p>
                 </div>
               </div>
+              {/* Enable Trailing Stop Switch - only show for futures */}
+              {formData.trading_mode === 'futures' && (
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Enable Trailing Stop
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Bật/tắt trailing stop cho bot này
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({
+                        ...formData,
+                        enable_trailing_stop: !formData.enable_trailing_stop,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                      formData.enable_trailing_stop
+                        ? 'bg-indigo-600'
+                        : 'bg-gray-200'
+                    }`}>
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        formData.enable_trailing_stop
+                          ? 'translate-x-6'
+                          : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+              {/* Margin Mode & Trailing Stop Config - only show for futures */}
+              {formData.trading_mode === 'futures' && (
+                <>
+                  {/* Margin Mode - always show for futures */}
+                  <div className="relative dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Margin Mode
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        formData.margin_mode
+                          ? marginModes.find(
+                              (mode) => mode.value === formData.margin_mode,
+                            )?.label || formData.margin_mode
+                          : marginModeSearch
+                      }
+                      onChange={(e) => {
+                        setMarginModeSearch(e.target.value);
+                        setShowMarginModeDropdown(true);
+                        if (!e.target.value) {
+                          setFormData({
+                            ...formData,
+                            margin_mode: 'ISOLATED',
+                          });
+                        }
+                      }}
+                      onFocus={() => {
+                        setShowMarginModeDropdown(true);
+                        if (!marginModeSearch) {
+                          setMarginModeSearch('');
+                        }
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                      placeholder="Search margin mode..."
+                      required
+                      autoComplete="off"
+                    />
+                    {showMarginModeDropdown &&
+                      filteredMarginModes.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredMarginModes.map((mode) => (
+                            <button
+                              key={mode.value}
+                              type="button"
+                              onClick={() => {
+                                setFormData({
+                                  ...formData,
+                                  margin_mode: mode.value,
+                                });
+                                setMarginModeSearch('');
+                                setShowMarginModeDropdown(false);
+                              }}
+                              className="w-full px-4 py-3 text-left hover:bg-indigo-50 text-gray-900 transition-colors border-b last:border-b-0">
+                              <div className="font-medium">{mode.label}</div>
+                              <div className="text-xs text-gray-500">
+                                {mode.description}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    {formData.margin_mode && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Selected:{' '}
+                        {
+                          marginModes.find(
+                            (mode) => mode.value === formData.margin_mode,
+                          )?.label
+                        }
+                      </p>
+                    )}
+                  </div>
 
+                  {/* Trailing Stop Configuration - only show when enabled */}
+                  {formData.enable_trailing_stop && (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Callback Rate for Trailing Stop */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Callback Rate (%)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            max="5"
+                            value={formData.callback_rate}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                callback_rate: e.target.value,
+                              })
+                            }
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                            placeholder="1.0"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Callback rate cho trailing stop (0.1-5%)
+                          </p>
+                        </div>
+
+                        {/* Activation Price for Trailing Stop */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Activation Price (%)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formData.activation_price}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                activation_price: e.target.value,
+                              })
+                            }
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                            placeholder="0"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            % tăng/giảm từ entry price để kích hoạt trailing
+                            stop (để 0 để kích hoạt ngay)
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}{' '}
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -800,7 +1030,6 @@ export default function BotConfigsPage() {
                   Số tiền sẽ dùng cho mỗi lệnh trade
                 </p>
               </div>
-
               {/* Stop Loss & Take Profit */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -842,7 +1071,6 @@ export default function BotConfigsPage() {
                   />
                 </div>
               </div>
-
               {/* API Credentials Section */}
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -889,7 +1117,6 @@ export default function BotConfigsPage() {
                   </div>
                 </div>
               </div>
-
               {/* Modal Footer */}
               <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
                 <button
