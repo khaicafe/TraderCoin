@@ -180,24 +180,6 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 		// 	}
 		// }
 
-		////////// STEP 1: Set Margin Mode (ISOLATED or CROSSED) - only once per symbol
-		marginMode := config.MarginMode
-		if marginMode == "" {
-			marginMode = "ISOLATED" // Default to ISOLATED if not set
-		}
-		if err := ts.SetMarginType(config, symbol, marginMode); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to set margin type to %s: %v\n", marginMode, err)
-			// Don't fail here, continue with order placement
-		}
-
-		////////// STEP 2: Set Leverage - only once per symbol
-		if config.Leverage > 0 {
-			if err := ts.SetLeverage(config, symbol, config.Leverage); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to set leverage: %v\n", err)
-				// Don't fail here, continue with order placement
-			}
-		}
-
 		////////// STEP 3: Pre-cleanup (correct order): first close position, then cancel all open orders
 		closeRes := ts.CloseFuturesPositionMarket(config, symbol)
 		if closeRes.Success {
@@ -219,7 +201,25 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 			fmt.Println("Canceled:", err)
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond) // small delay to ensure state settles
+
+		////////// STEP 1: Set Margin Mode (ISOLATED or CROSSED) - only once per symbol
+		marginMode := config.MarginMode
+		if marginMode == "" {
+			marginMode = "ISOLATED" // Default to ISOLATED if not set
+		}
+		if err := ts.SetMarginType(config, symbol, marginMode); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to set margin type to %s: %v\n", marginMode, err)
+			// Don't fail here, continue with order placement
+		}
+
+		////////// STEP 2: Set Leverage - only once per symbol
+		if config.Leverage > 0 {
+			if err := ts.SetLeverage(config, symbol, config.Leverage); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to set leverage: %v\n", err)
+				// Don't fail here, continue with order placement
+			}
+		}
 
 		// return OrderResult{
 		// 	Success: false,

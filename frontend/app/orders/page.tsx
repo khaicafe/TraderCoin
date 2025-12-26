@@ -348,52 +348,121 @@ export default function OrdersPage() {
     let spotWs: WebSocket | null = null;
     let futuresWs: WebSocket | null = null;
 
-    // Spot WebSocket
+    // ===== SPOT WEBSOCKET =====
     if (spotSymbols.length > 0) {
       const streams = spotSymbols.map((s) => `${s}@ticker`).join('/');
-      spotWs = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
+
+      console.log(`🔧 Spot symbols:`, spotSymbols);
+      console.log(`🔧 Spot streams:`, streams);
+
+      // Always use combined streams format (more reliable)
+      const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+      console.log(`🔌 Connecting to Spot WS:`, url);
+
+      spotWs = new WebSocket(url);
 
       spotWs.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.e === '24hrTicker') {
-          setRealtimePrices((prev) => ({
-            ...prev,
-            [data.s.toUpperCase()]: {
-              price: parseFloat(data.c),
-              change: parseFloat(data.p),
-              percent: parseFloat(data.P),
-            },
-          }));
+        try {
+          const message = JSON.parse(event.data);
+          // Combined stream wraps data in "data" field
+          if (message.data && message.data.e === '24hrTicker') {
+            const data = message.data;
+            setRealtimePrices((prev) => ({
+              ...prev,
+              [data.s.toUpperCase()]: {
+                price: parseFloat(data.c),
+                change: parseFloat(data.p),
+                percent: parseFloat(data.P),
+              },
+            }));
+          }
+        } catch (err) {
+          console.error('Error parsing Spot WS message:', err);
         }
+      };
+
+      spotWs.onopen = () => {
+        console.log(`✅ Spot WS connected (${spotSymbols.length} symbols)`);
+      };
+
+      spotWs.onerror = (err) => {
+        console.error('❌ Spot WS error:', err);
+        console.error('   Symbols:', spotSymbols);
+        console.error('   URL:', url);
+      };
+
+      spotWs.onclose = (event) => {
+        console.log(
+          `🔌 Spot WS closed. Code: ${event.code}, Reason: ${
+            event.reason || 'None'
+          }`,
+        );
       };
     }
 
-    // Futures WebSocket - CHÍNH CHO FUTURES
+    // ===== FUTURES WEBSOCKET =====
     if (futuresSymbols.length > 0) {
       const streams = futuresSymbols.map((s) => `${s}@ticker`).join('/');
-      futuresWs = new WebSocket(`wss://fstream.binance.com/ws/${streams}`);
+
+      console.log(`🔧 Futures symbols:`, futuresSymbols);
+      console.log(`🔧 Futures streams:`, streams);
+
+      // Always use combined streams format (more reliable)
+      const url = `wss://fstream.binance.com/stream?streams=${streams}`;
+      console.log(`🔌 Connecting to Futures WS:`, url);
+
+      futuresWs = new WebSocket(url);
 
       futuresWs.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.e === '24hrTicker') {
-          setRealtimePrices((prev) => ({
-            ...prev,
-            [`${data.s.toUpperCase()}_FUTURES`]: {
-              price: parseFloat(data.c),
-              change: parseFloat(data.p),
-              percent: parseFloat(data.P),
-            },
-          }));
+        try {
+          const message = JSON.parse(event.data);
+          // Combined stream wraps data in "data" field
+          if (message.data && message.data.e === '24hrTicker') {
+            const data = message.data;
+            setRealtimePrices((prev) => ({
+              ...prev,
+              [`${data.s.toUpperCase()}_FUTURES`]: {
+                price: parseFloat(data.c),
+                change: parseFloat(data.p),
+                percent: parseFloat(data.P),
+              },
+            }));
+          }
+        } catch (err) {
+          console.error('Error parsing Futures WS message:', err);
         }
       };
 
-      futuresWs.onerror = (err) => console.warn('Futures WS error:', err);
-      futuresWs.onclose = () => console.log('Futures WS closed');
+      futuresWs.onopen = () => {
+        console.log(
+          `✅ Futures WS connected (${futuresSymbols.length} symbols)`,
+        );
+      };
+
+      futuresWs.onerror = (err) => {
+        console.error('❌ Futures WS error:', err);
+        console.error('   Symbols:', futuresSymbols);
+        console.error('   URL:', url);
+      };
+
+      futuresWs.onclose = (event) => {
+        console.log(
+          `🔌 Futures WS closed. Code: ${event.code}, Reason: ${
+            event.reason || 'None'
+          }`,
+        );
+      };
     }
 
     return () => {
-      spotWs?.close();
-      futuresWs?.close();
+      if (spotWs) {
+        console.log('🔌 Closing Spot WS...');
+        spotWs.close();
+      }
+      if (futuresWs) {
+        console.log('🔌 Closing Futures WS...');
+        futuresWs.close();
+      }
     };
   }, [orders]);
 
