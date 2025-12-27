@@ -242,51 +242,51 @@ func (s *TelegramService) TestConnection(botToken, chatID string) error {
 	message := "✅ <b>Telegram Bot Connected Successfully!</b>\n\n"
 
 	// Text Formatting Examples
-	message += "📝 <b>Text Formatting Examples:</b>\n"
-	message += "• <b>Bold Text</b>\n"
-	message += "• <i>Italic Text</i>\n"
-	message += "• <u>Underlined Text</u>\n"
-	message += "• <s>Strikethrough Text</s>\n"
-	message += "• <code>Inline Code</code>\n"
-	message += "• <pre>Preformatted Code Block</pre>\n"
-	message += "• <a href='https://tradercoin.com'>Hyperlink</a>\n\n"
+	// message += "📝 <b>Text Formatting Examples:</b>\n"
+	// message += "• <b>Bold Text</b>\n"
+	// message += "• <i>Italic Text</i>\n"
+	// message += "• <u>Underlined Text</u>\n"
+	// message += "• <s>Strikethrough Text</s>\n"
+	// message += "• <code>Inline Code</code>\n"
+	// message += "• <pre>Preformatted Code Block</pre>\n"
+	// message += "• <a href='https://tradercoin.com'>Hyperlink</a>\n\n"
 
-	// Emoji Examples
-	message += "🎯 <b>Emoji Examples:</b>\n"
-	message += "💰 📊 📈 📉 🚀 ⚡ 🔥 💎 ⭐ ✅ ❌ ⚠️ 🔔 🎉 🤖 💸\n\n"
+	// // Emoji Examples
+	// message += "🎯 <b>Emoji Examples:</b>\n"
+	// message += "💰 📊 📈 📉 🚀 ⚡ 🔥 💎 ⭐ ✅ ❌ ⚠️ 🔔 🎉 🤖 💸\n\n"
 
-	// Trading Notification Example
-	message += "📊 <b>Sample Trade Notification:</b>\n"
-	message += "━━━━━━━━━━━━━━━━\n"
-	message += "Symbol: <b>BTC/USDT</b>\n"
-	message += "Side: <b>🟢 LONG</b>\n"
-	message += "Entry: <code>$45,000.00</code>\n"
-	message += "Amount: <b>0.5 BTC</b>\n"
-	message += "Stop Loss: <code>$44,000.00</code> (-2.22%)\n"
-	message += "Take Profit: <code>$47,000.00</code> (+4.44%)\n"
-	message += "Status: <b>✅ FILLED</b>\n"
-	message += "━━━━━━━━━━━━━━━━\n\n"
+	// // Trading Notification Example
+	// message += "📊 <b>Sample Trade Notification:</b>\n"
+	// message += "━━━━━━━━━━━━━━━━\n"
+	// message += "Symbol: <b>BTC/USDT</b>\n"
+	// message += "Side: <b>🟢 LONG</b>\n"
+	// message += "Entry: <code>$45,000.00</code>\n"
+	// message += "Amount: <b>0.5 BTC</b>\n"
+	// message += "Stop Loss: <code>$44,000.00</code> (-2.22%)\n"
+	// message += "Take Profit: <code>$47,000.00</code> (+4.44%)\n"
+	// message += "Status: <b>✅ FILLED</b>\n"
+	// message += "━━━━━━━━━━━━━━━━\n\n"
 
-	// PnL Example
-	message += "💰 <b>P&amp;L Update:</b>\n"
-	message += "Current Price: <code>$45,500.00</code>\n"
-	message += "Unrealized P&amp;L: <b>+$250.00</b> 🟢 (+1.11%)\n\n"
+	// // PnL Example
+	// message += "💰 <b>P&amp;L Update:</b>\n"
+	// message += "Current Price: <code>$45,500.00</code>\n"
+	// message += "Unrealized P&amp;L: <b>+$250.00</b> 🟢 (+1.11%)\n\n"
 
-	// Alert Example
-	message += "⚠️ <b>Sample Alert:</b>\n"
-	message += "Stop Loss triggered at $44,100.00\n"
-	message += "Loss: <code>-$450.00</code> ❌ (-2.00%)\n\n"
+	// // Alert Example
+	// message += "⚠️ <b>Sample Alert:</b>\n"
+	// message += "Stop Loss triggered at $44,100.00\n"
+	// message += "Loss: <code>-$450.00</code> ❌ (-2.00%)\n\n"
 
-	// Bot Status Example
-	message += "🤖 <b>Bot Status:</b>\n"
-	message += "Status: <b>🟢 ACTIVE</b>\n"
-	message += "Runtime: <code>5h 23m</code>\n"
-	message += "Total Trades: <b>12</b>\n"
-	message += "Win Rate: <b>75%</b> (9W / 3L)\n"
-	message += "Total P&amp;L: <b>+$1,250.00</b> 🚀\n\n"
+	// // Bot Status Example
+	// message += "🤖 <b>Bot Status:</b>\n"
+	// message += "Status: <b>🟢 ACTIVE</b>\n"
+	// message += "Runtime: <code>5h 23m</code>\n"
+	// message += "Total Trades: <b>12</b>\n"
+	// message += "Win Rate: <b>75%</b> (9W / 3L)\n"
+	// message += "Total P&amp;L: <b>+$1,250.00</b> 🚀\n\n"
 
-	message += "🎉 <i>Your bot is ready to send notifications!</i>\n"
-	message += "Click the buttons below to explore 👇"
+	// message += "🎉 <i>Your bot is ready to send notifications!</i>\n"
+	// message += "Click the buttons below to explore 👇"
 
 	msg := tgbotapi.NewMessage(chatIDInt, message)
 	msg.ParseMode = "HTML"
