@@ -114,10 +114,9 @@ func (s *TelegramService) SendDocument(botToken, chatID, fileURL, caption string
 	return nil
 }
 
-// SendMessageToUser sends message to user by user_id
 func (s *TelegramService) SendMessageToUser(userID uint, message, parseMode string) error {
 	var config models.TelegramConfig
-	if err := s.db.Where("user_id = ? AND is_enabled = ?", userID, true).First(&config).Error; err != nil {
+	if err := s.db.Where("user_id = ? AND is_active = ?", userID, "active").First(&config).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("telegram configuration not found or disabled for user")
 		}
@@ -125,6 +124,64 @@ func (s *TelegramService) SendMessageToUser(userID uint, message, parseMode stri
 	}
 
 	return s.SendMessage(config.BotToken, config.ChatID, message, parseMode)
+}
+
+// SendMessageToUser sends message to user by chatID
+func (s *TelegramService) SendMessageToUserSignal(botToken, chatID, symbol, side string) error {
+	bot, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Printf("❌ Failed to create bot: %v", err)
+		return fmt.Errorf("failed to create bot: %w", err)
+	}
+
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		log.Printf("❌ Invalid chat ID: %v", err)
+		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	log.Printf("📤 Sending comprehensive test message to Telegram")
+	log.Printf("   Bot Username: @%s", bot.Self.UserName)
+	log.Printf("   Chat ID: %s", chatID)
+
+	baseLabel, callback := BuildTradeLabels(symbol, side)
+	// 🎨 COMPREHENSIVE TEST MESSAGE WITH ALL FORMATTING STYLES
+	message := fmt.Sprintf("\n************************************\n")
+	message += "<b>🚨 New Trading Signal</b>\n\n"
+	message += fmt.Sprintf("Symbol: <b>%s</b>\n", baseLabel)
+	message += fmt.Sprintf("Side: <b>%s</b>\n", strings.ToUpper(side))
+	message += fmt.Sprintf("\n")
+
+	msg := tgbotapi.NewMessage(chatIDInt, message)
+	msg.ParseMode = "HTML"
+
+	// Xác định emoji dựa trên side
+	emoji := "⚪️" // Emoji mặc định
+	if strings.ToUpper(side) == "BUY" {
+		emoji = "🟢"
+	} else if strings.ToUpper(side) == "SELL" {
+		emoji = "🔴"
+	}
+	// 🎮 COMPREHENSIVE INLINE KEYBOARD WITH MULTIPLE EXAMPLES
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		// Row 4: Quick Trade Buttons (với callback_data)
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(emoji+" "+baseLabel, callback),
+		),
+	)
+	msg.ReplyMarkup = keyboard
+
+	sentMsg, err := bot.Send(msg)
+	if err != nil {
+		log.Printf("❌ Failed to send test message: %v", err)
+		return fmt.Errorf("failed to send message: %w", err)
+	}
+
+	log.Printf("✅ Telegram connection test successful!")
+	log.Printf("   Message ID: %d", sentMsg.MessageID)
+	log.Printf("   Sent at: %v", sentMsg.Date)
+
+	return nil
 }
 
 // SendBotStatus sends bot status update notification
@@ -223,7 +280,7 @@ func (s *TelegramService) SendTradeNotification(userID uint, tradeInfo map[strin
 
 // BroadcastTestConnectionToAllUsers sends the test connection message
 // to every user that has a non-empty chat_id in the users table.
-func (s *TelegramService) BroadcastTestConnectionToAllUsers(botToken string) error {
+func (s *TelegramService) BroadcastTestConnectionToAllUsers(botToken, symbol, side string) error {
 	var users []models.User
 
 	// Lọc user có chat_id khác rỗng và status = active (tùy DB schema của bạn)
@@ -249,7 +306,7 @@ func (s *TelegramService) BroadcastTestConnectionToAllUsers(botToken string) err
 		}
 
 		// Gửi test message giống TestConnection hiện tại
-		if err := s.TestConnection(botToken, chatID); err != nil {
+		if err := s.SendMessageToUserSignal(botToken, chatID, symbol, side); err != nil {
 			log.Printf("❌ Failed to send test connection to userID=%d chatID=%s: %v", u.ID, chatID, err)
 			if firstErr == nil {
 				firstErr = err
@@ -581,4 +638,39 @@ func (s *TelegramService) PlaceOrderFromTelegram(userID uint, symbol, side, orde
 		orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity)
 
 	return &orderResult, nil
+}
+
+// BuildTradeLabels nhận symbol (vd: DOGEUSDT) và side (vd: BUY)
+// trả về:
+//   - prettySymbol: "DOGE/USDT BUY"
+//   - callbackData: "trade_BUY_DOGEUSDT"
+func BuildTradeLabels(symbol, side string) (prettySymbol, callbackData string) {
+	// Danh sách các quote phổ biến, ưu tiên length dài hơn trước
+	quotes := []string{
+		"USDT", "BUSD", "FDUSD", "TUSD",
+		"BTC", "ETH", "BNB",
+		"USDC", "DAI",
+	}
+
+	base := symbol
+	quote := ""
+
+	// Tìm quote bằng cách check hậu tố của symbol
+	for _, q := range quotes {
+		if strings.HasSuffix(strings.ToUpper(symbol), q) && len(symbol) > len(q) {
+			base = symbol[:len(symbol)-len(q)]
+			quote = q
+			break
+		}
+	}
+
+	// Nếu không tìm được quote, giữ nguyên symbol
+	if quote == "" {
+		prettySymbol = fmt.Sprintf("%s %s", strings.ToUpper(symbol), strings.ToUpper(side))
+	} else {
+		prettySymbol = fmt.Sprintf("%s/%s %s", strings.ToUpper(base), strings.ToUpper(quote), strings.ToUpper(side))
+	}
+
+	callbackData = fmt.Sprintf("trade_%s_%s", strings.ToUpper(side), strings.ToUpper(symbol))
+	return
 }

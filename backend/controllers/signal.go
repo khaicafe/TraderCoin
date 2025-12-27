@@ -94,7 +94,7 @@ func TradingViewWebhook(svcs *services.Services, wsHub *services.WebSocketHub) g
 			// Use the first active bot token (or implement logic to choose specific bot)
 			botToken := telegramConfigs[0].BotToken
 			go func() {
-				if err := telegramService.BroadcastTestConnectionToAllUsers(botToken); err != nil {
+				if err := telegramService.BroadcastTestConnectionToAllUsers(botToken, signal.Symbol, signal.Action); err != nil {
 					log.Printf("❌ Failed to broadcast Telegram notification: %v", err)
 				} else {
 					log.Printf("✅ Telegram notification sent to all users with bot: %s", telegramConfigs[0].BotName)
