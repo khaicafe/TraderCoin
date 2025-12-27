@@ -86,6 +86,12 @@ func SeedData(db *gorm.DB) error {
 		return err
 	}
 
+	// Seed Telegram configurations
+	if err := SeedTelegramConfigs(db); err != nil {
+		log.Printf("Failed to seed telegram configs: %v", err)
+		return err
+	}
+
 	log.Println("✅ Sample data seeding completed!")
 	return nil
 }
@@ -252,5 +258,44 @@ func SeedTransactions(db *gorm.DB) error {
 	}
 
 	log.Printf("✅ Created %d sample transactions", len(transactions))
+	return nil
+}
+
+// SeedTelegramConfigs creates sample Telegram bot configurations
+func SeedTelegramConfigs(db *gorm.DB) error {
+	log.Println("Seeding Telegram configurations...")
+
+	// Check if telegram configs already exist
+	var configCount int64
+	db.Model(&models.TelegramConfig{}).Count(&configCount)
+	if configCount > 0 {
+		log.Println("ℹ️  Telegram configurations already exist")
+		return nil
+	}
+
+	// Get existing users
+	var users []models.User
+	db.Find(&users)
+
+	if len(users) == 0 {
+		log.Println("⚠️  No users found, skipping telegram config seeding")
+		return nil
+	}
+
+	// Sample Telegram config for first user
+	telegramConfig := models.TelegramConfig{
+		UserID:    users[0].ID,
+		BotToken:  "8446077844:AAFhMD3CIrw-slgbk57TXstRKZsVl84Iyoo",
+		ChatID:    "411713304",
+		BotName:   "TraderCoin Bot",
+		IsEnabled: true,
+	}
+
+	if err := db.Create(&telegramConfig).Error; err != nil {
+		log.Printf("❌ Failed to create telegram config: %v", err)
+		return err
+	}
+
+	log.Printf("✅ Created Telegram configuration for user: %s", users[0].Email)
 	return nil
 }

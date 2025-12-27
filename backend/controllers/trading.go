@@ -119,7 +119,7 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		// Decrypt API credentials
+		////////////// Decrypt API credentials //////////////
 		apiKey, apiSecret, err := GetDecryptedAPICredentials(&config)
 		if err != nil {
 			log.Printf("Failed to decrypt API credentials: %v", err)
@@ -202,6 +202,8 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
 			return
 		}
+
+		//////////////////////////////////////////////////////////////////////
 
 		// Log Algo IDs if they exist (indicating SL/TP orders were placed by service)
 		if orderResult.AlgoIDStopLoss != "" || orderResult.AlgoIDTakeProfit != "" {

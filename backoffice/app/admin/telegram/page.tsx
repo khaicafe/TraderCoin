@@ -19,12 +19,6 @@ interface TelegramConfig {
   };
 }
 
-interface User {
-  id: number;
-  email: string;
-  full_name: string;
-}
-
 export default function TelegramManagement() {
   const router = useRouter();
   const [configs, setConfigs] = useState<TelegramConfig[]>([]);
@@ -39,17 +33,18 @@ export default function TelegramManagement() {
     message: string;
   } | null>(null);
 
-  // Add Config Modal States
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  // Edit Config Modal States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<TelegramConfig | null>(
+    null,
+  );
   const [formData, setFormData] = useState({
     bot_token: '',
     chat_id: '',
     bot_name: '',
     is_enabled: true,
   });
-  const [addLoading, setAddLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
@@ -86,46 +81,27 @@ export default function TelegramManagement() {
   };
 
   const fetchUsers = async () => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) return;
+    // Không cần nữa vì chỉ có 1 config
+  };
 
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/users`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-
-      const data = await response.json();
-      setUsers(data.users || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
+  const handleOpenEditModal = () => {
+    // Lấy config hiện tại (chỉ có 1 row duy nhất)
+    if (configs.length > 0) {
+      const config = configs[0];
+      setEditingConfig(config);
+      setFormData({
+        bot_token: config.bot_token,
+        chat_id: config.chat_id,
+        bot_name: config.bot_name || '',
+        is_enabled: config.is_enabled,
+      });
+      setShowEditModal(true);
     }
   };
 
-  const handleOpenAddModal = () => {
-    setShowAddModal(true);
-    fetchUsers();
-    // Reset form
-    setFormData({
-      bot_token: '',
-      chat_id: '',
-      bot_name: '',
-      is_enabled: true,
-    });
-    setSelectedUserId(null);
-  };
-
-  const handleCloseAddModal = () => {
-    setShowAddModal(false);
-    setSelectedUserId(null);
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingConfig(null);
     setFormData({
       bot_token: '',
       chat_id: '',
@@ -134,33 +110,33 @@ export default function TelegramManagement() {
     });
   };
 
-  const handleAddConfig = async () => {
-    if (!selectedUserId) {
-      alert('Please select a user');
-      return;
-    }
-
+  const handleSaveConfig = async () => {
     if (!formData.bot_token || !formData.chat_id) {
       alert('Bot Token and Chat ID are required');
       return;
     }
 
+    if (!editingConfig) {
+      alert('No configuration to edit');
+      return;
+    }
+
     const token = localStorage.getItem('admin_token');
     if (!token) return;
 
-    setAddLoading(true);
+    setSaveLoading(true);
 
     try {
+      // Sử dụng admin PUT endpoint để update config
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/telegram`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/telegram/${editingConfig.id}`,
         {
-          method: 'POST',
+          method: 'PUT',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            user_id: selectedUserId,
             bot_token: formData.bot_token,
             chat_id: formData.chat_id,
             bot_name: formData.bot_name,
@@ -172,17 +148,17 @@ export default function TelegramManagement() {
       const data = await response.json();
 
       if (response.ok) {
-        alert('Telegram configuration added successfully!');
-        handleCloseAddModal();
+        alert('Telegram configuration updated successfully!');
+        handleCloseEditModal();
         fetchConfigs(token);
       } else {
-        alert(data.error || 'Failed to add configuration');
+        alert(data.error || 'Failed to update configuration');
       }
     } catch (error) {
-      console.error('Error adding config:', error);
-      alert('Failed to add configuration');
+      console.error('Error updating config:', error);
+      alert('Failed to update configuration');
     } finally {
-      setAddLoading(false);
+      setSaveLoading(false);
     }
   };
 
@@ -280,10 +256,22 @@ export default function TelegramManagement() {
           </p>
         </div>
         <button
-          onClick={handleOpenAddModal}
-          className="px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2 font-medium">
-          <span className="text-xl">+</span>
-          Add Configuration
+          onClick={handleOpenEditModal}
+          disabled={configs.length === 0}
+          className="px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+          Edit Configuration
         </button>
       </div>
 
@@ -372,9 +360,6 @@ export default function TelegramManagement() {
             <thead className="bg-gradient-to-r from-orange-400 to-orange-500">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
-                  User
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
                   Bot Name
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider">
@@ -422,31 +407,6 @@ export default function TelegramManagement() {
                   <tr
                     key={config.id}
                     className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full flex items-center justify-center">
-                          <span className="text-white font-bold text-sm">
-                            {config.User?.full_name
-                              ? config.User.full_name
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')
-                                  .toUpperCase()
-                              : config.User?.email
-                              ? config.User.email[0].toUpperCase()
-                              : '?'}
-                          </span>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {config.User?.full_name || 'N/A'}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {config.User?.email || 'N/A'}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {config.bot_name || 'Unnamed Bot'}
@@ -655,38 +615,30 @@ export default function TelegramManagement() {
         </div>
       )}
 
-      {/* Add Config Modal */}
-      {showAddModal && (
+      {/* Edit Config Modal */}
+      {showEditModal && editingConfig && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-gradient-to-r from-orange-400 to-orange-500 text-white p-6 rounded-t-lg">
-              <h2 className="text-2xl font-bold">Add Telegram Configuration</h2>
+              <h2 className="text-2xl font-bold">
+                Edit Telegram Configuration
+              </h2>
               <p className="text-white/90 text-sm mt-1">
-                Configure Telegram notifications for a user
+                Update Telegram notification settings
               </p>
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Select User */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select User *
-                </label>
-                <select
-                  value={selectedUserId || ''}
-                  onChange={(e) =>
-                    setSelectedUserId(
-                      e.target.value ? Number(e.target.value) : null,
-                    )
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900">
-                  <option value="">-- Select a user --</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name || user.email} ({user.email})
-                    </option>
-                  ))}
-                </select>
+              {/* Current User Info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-semibold text-blue-900 mb-1">
+                  Current User
+                </p>
+                <p className="text-sm text-blue-800">
+                  {editingConfig.User?.full_name ||
+                    editingConfig.User?.email ||
+                    'N/A'}
+                </p>
               </div>
 
               {/* Bot Token */}
@@ -783,16 +735,16 @@ export default function TelegramManagement() {
             {/* Modal Actions */}
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end border-t">
               <button
-                onClick={handleCloseAddModal}
-                disabled={addLoading}
+                onClick={handleCloseEditModal}
+                disabled={saveLoading}
                 className="px-6 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium disabled:opacity-50">
                 Cancel
               </button>
               <button
-                onClick={handleAddConfig}
-                disabled={addLoading}
+                onClick={handleSaveConfig}
+                disabled={saveLoading}
                 className="px-6 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
-                {addLoading ? (
+                {saveLoading ? (
                   <>
                     <svg
                       className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
@@ -810,10 +762,10 @@ export default function TelegramManagement() {
                         fill="currentColor"
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Adding...
+                    Saving...
                   </>
                 ) : (
-                  'Add Configuration'
+                  'Save Changes'
                 )}
               </button>
             </div>

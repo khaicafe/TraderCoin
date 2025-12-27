@@ -293,31 +293,31 @@ func (s *TelegramService) TestConnection(botToken, chatID string) error {
 
 	// 🎮 COMPREHENSIVE INLINE KEYBOARD WITH MULTIPLE EXAMPLES
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		// Row 1: Documentation & GitHub
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL("📚 Documentation", "https://github.com/khaicafe/TraderCoin"),
-			tgbotapi.NewInlineKeyboardButtonURL("⭐ Star on GitHub", "https://github.com/khaicafe/TraderCoin/stargazers"),
-		),
-		// Row 2: Trading Links
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL("📊 Binance", "https://www.binance.com"),
-			tgbotapi.NewInlineKeyboardButtonURL("💹 TradingView", "https://www.tradingview.com"),
-		),
-		// Row 3: Crypto News
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL("📰 CoinDesk", "https://www.coindesk.com"),
-			tgbotapi.NewInlineKeyboardButtonURL("🔍 CoinGecko", "https://www.coingecko.com"),
-		),
+		// // Row 1: Documentation & GitHub
+		// tgbotapi.NewInlineKeyboardRow(
+		// 	tgbotapi.NewInlineKeyboardButtonURL("📚 Documentation", "https://github.com/khaicafe/TraderCoin"),
+		// 	tgbotapi.NewInlineKeyboardButtonURL("⭐ Star on GitHub", "https://github.com/khaicafe/TraderCoin/stargazers"),
+		// ),
+		// // Row 2: Trading Links
+		// tgbotapi.NewInlineKeyboardRow(
+		// 	tgbotapi.NewInlineKeyboardButtonURL("📊 Binance", "https://www.binance.com"),
+		// 	tgbotapi.NewInlineKeyboardButtonURL("💹 TradingView", "https://www.tradingview.com"),
+		// ),
+		// // Row 3: Crypto News
+		// tgbotapi.NewInlineKeyboardRow(
+		// 	tgbotapi.NewInlineKeyboardButtonURL("📰 CoinDesk", "https://www.coindesk.com"),
+		// 	tgbotapi.NewInlineKeyboardButtonURL("🔍 CoinGecko", "https://www.coingecko.com"),
+		// ),
 		// Row 4: Quick Trade Buttons (với callback_data)
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🟢 ETHUSDT BUY", "trade_BUY_ETHUSDT"),
-			tgbotapi.NewInlineKeyboardButtonData("🔴 ETHUSDT SELL", "trade_SELL_ETHUSDT"),
+			tgbotapi.NewInlineKeyboardButtonData("🟢 ETH/USDT BUY", "trade_BUY_ETHUSDT"),
+			tgbotapi.NewInlineKeyboardButtonData("🔴 ETH/USDT SELL", "trade_SELL_ETHUSDT"),
 		),
 		// Row 5: More Trade Buttons
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🟢 BTCUSDT BUY", "trade_BUY_BTCUSDT"),
-			tgbotapi.NewInlineKeyboardButtonData("🔴 BTCUSDT SELL", "trade_SELL_BTCUSDT"),
-		),
+		// tgbotapi.NewInlineKeyboardRow(
+		// 	tgbotapi.NewInlineKeyboardButtonData("🟢 BTCUSDT BUY", "trade_BUY_BTCUSDT"),
+		// 	tgbotapi.NewInlineKeyboardButtonData("🔴 BTCUSDT SELL", "trade_SELL_BTCUSDT"),
+		// ),
 	)
 	msg.ReplyMarkup = keyboard
 

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -295,73 +296,20 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		// Decrypt API credentials
-		apiKey, err := utils.DecryptString(config.APIKey)
+		////////////// Decrypt API credentials //////////////
+		apiKey, apiSecret, err := GetDecryptedAPICredentials(&config)
 		if err != nil {
-			signal.Status = "failed"
-			signal.ErrorMessage = "Failed to decrypt API key"
-			signal.ExecutedAt = time.Now()
-			services.DB.Save(&signal)
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to decrypt API credentials",
-			})
+			log.Printf("Failed to decrypt API credentials: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt API credentials"})
 			return
 		}
 
-		apiSecret, err := utils.DecryptString(config.APISecret)
-		if err != nil {
-			signal.Status = "failed"
-			signal.ErrorMessage = "Failed to decrypt API secret"
-			signal.ExecutedAt = time.Now()
-			services.DB.Save(&signal)
+		// Place order on exchange (LIVE MODE)
+		utils.LogInfo(fmt.Sprintf("🔍 DEBUG PlaceOrder params: side=%s, orderType=%s, symbol=%s, amount=%.8f, price=%.8f",
+			side, orderType, signal.Symbol, amount, price))
 
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to decrypt API credentials",
-			})
-			return
-		}
-
-		// 🧪 TEST MODE: Check if test_mode query parameter is set
-		testMode := c.Query("test_mode") == "true"
-
-		var orderResult tradingservice.OrderResult
-
-		if testMode {
-			// 🧪 BYPASS PlaceOrder - Create mock order result for testing
-			utils.LogInfo("🧪 TEST MODE: Bypassing PlaceOrder, creating mock order")
-
-			// Use signal price if available, otherwise generate a mock price
-			mockFilledPrice := price
-			if mockFilledPrice == 0 {
-				mockFilledPrice = signal.Price
-			}
-			if mockFilledPrice == 0 {
-				mockFilledPrice = 100.0 // Default mock price
-			}
-
-			orderResult = tradingservice.OrderResult{
-				Success:     true,
-				OrderID:     fmt.Sprintf("TEST-%d-%d", time.Now().Unix(), signalID),
-				Symbol:      signal.Symbol,
-				Side:        side,
-				Type:        orderType,
-				Quantity:    amount,
-				Price:       mockFilledPrice,
-				FilledPrice: mockFilledPrice,
-				Status:      "filled",
-				Error:       "",
-			}
-			utils.LogInfo(fmt.Sprintf("🧪 Mock Order Created: ID=%s, Symbol=%s, Side=%s, Qty=%.4f, Price=%.2f",
-				orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity, orderResult.FilledPrice))
-		} else {
-			// Place order on exchange (LIVE MODE)
-			utils.LogInfo(fmt.Sprintf("🔍 DEBUG PlaceOrder params: side=%s, orderType=%s, symbol=%s, amount=%.8f, price=%.8f",
-				side, orderType, signal.Symbol, amount, price))
-
-			tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange, services.DB, userID.(uint))
-			orderResult = tradingService.PlaceOrder(&config, side, orderType, signal.Symbol, amount, price)
-		}
+		tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange, services.DB, userID.(uint))
+		orderResult := tradingService.PlaceOrder(&config, side, orderType, signal.Symbol, amount, price)
 
 		if !orderResult.Success {
 			utils.LogError(fmt.Sprintf("❌ Failed to execute signal: %v", orderResult.Error))
@@ -405,27 +353,8 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 			}
 		}
 
-		// Create order record
-		// order := models.Order{
-		// 	UserID:          userID.(uint),
-		// 	BotConfigID:     config.ID,
-		// 	Exchange:        config.Exchange,
-		// 	Symbol:          orderResult.Symbol,
-		// 	OrderID:         orderResult.OrderID,
-		// 	Side:            orderResult.Side,
-		// 	Type:            orderResult.Type,
-		// 	Quantity:        orderResult.Quantity,
-		// 	Price:           orderResult.Price,
-		// 	FilledPrice:     orderResult.FilledPrice,
-		// 	Status:          orderResult.Status,
-		// 	TradingMode:     config.TradingMode,
-		// 	Leverage:        config.Leverage,
-		// 	StopLossPrice:   stopLoss,
-		// 	TakeProfitPrice: takeProfit,
-		// 	PnL:             0,
-		// 	PnLPercent:      0,
-		// }
-
+		// Create order record using Algo IDs from orderResult
+		// Service has already placed SL/TP orders and returned their IDs
 		order := models.Order{
 			UserID:           userID.(uint),
 			BotConfigID:      config.ID,
@@ -459,6 +388,8 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 			})
 			return
 		}
+
+		//////////////////////////////////////////////////////////////////////
 
 		// Update signal status
 		uid := userID.(uint)

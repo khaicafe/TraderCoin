@@ -179,6 +179,7 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			admin.GET("/logs", controllers.GetAllSystemLogs(services))                              // Get all system logs
 			admin.GET("/telegram", telegramController.GetAllTelegramConfigs)                        // Get all Telegram configs
 			admin.POST("/telegram", telegramController.AdminCreateTelegramConfig)                   // Create Telegram config for user
+			admin.PUT("/telegram/:id", telegramController.AdminUpdateTelegramConfig)                // Update Telegram config
 			admin.POST("/telegram/test-connection", telegramController.AdminTestTelegramConnection) // Test Telegram connection
 			admin.POST("/telegram/start-listener", telegramController.StartCallbackListener)        // Start callback listener for buttons
 
