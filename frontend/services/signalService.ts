@@ -1,5 +1,6 @@
 import api from './api';
 
+// 🆕 New structure: Signal is shared, status is per-user
 export interface TradingSignal {
   id: number;
   symbol: string;
@@ -9,15 +10,17 @@ export interface TradingSignal {
   take_profit: number;
   message: string;
   strategy: string;
-  status: string; // pending, executed, failed, ignored
-  order_id?: number;
-  executed_by_user_id?: number; // User ID who executed this signal
-  error_message?: string;
   webhook_prefix?: string;
   received_at: string;
-  executed_at?: string;
   created_at: string;
   updated_at: string;
+
+  // 🆕 User-specific fields (from user_signals JOIN)
+  status: string; // pending, executed, failed, ignored - PER USER
+  order_id?: number; // From user_signals
+  executed_by_user_id?: number; // From user_signals.user_id
+  executed_at?: string; // From user_signals
+  error_message?: string; // From user_signals.error_msg
   order?: any; // Order details if executed
 }
 

@@ -41,6 +41,16 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			user.PUT("/profile", controllers.UpdateProfile(services))
 		}
 
+		// ============ ACCOUNT ROUTES ============
+		// Prefix: /api/account
+		account := router.Group("/api/account")
+		account.Use(middleware.AuthMiddleware())
+		{
+			account.GET("/profile", controllers.GetProfile(services))
+			account.PUT("/profile", controllers.UpdateProfile(services))
+			account.PUT("/change-password", controllers.ChangePassword(services))
+		}
+
 		// ============ CONFIG ROUTES ============
 		// Prefix: /api/v1/config
 		config := v1.Group("/config")
@@ -206,11 +216,12 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			signalsAuth := signals.Group("")
 			signalsAuth.Use(middleware.AuthMiddleware())
 			{
-				signalsAuth.GET("", controllers.ListSignals(services))                   // List all signals
+				signalsAuth.GET("", controllers.ListSignals(services))                   // List signals with user-specific status
 				signalsAuth.GET("/:id", controllers.GetSignal(services))                 // Get single signal
 				signalsAuth.POST("/:id/execute", controllers.ExecuteSignal(services))    // Execute signal with bot config
-				signalsAuth.PUT("/:id/status", controllers.UpdateSignalStatus(services)) // Update signal status
+				signalsAuth.PUT("/:id/status", controllers.UpdateSignalStatus(services)) // Update signal status (for current user)
 				signalsAuth.DELETE("/:id", controllers.DeleteSignal(services))           // Delete signal
+
 				// Webhook prefix management
 				signalsAuth.GET("/webhook/prefix", controllers.GetWebhookPrefix(services))     // Get latest active prefix
 				signalsAuth.POST("/webhook/prefix", controllers.CreateWebhookPrefix(services)) // Create new prefix

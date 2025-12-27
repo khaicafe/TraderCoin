@@ -107,6 +107,7 @@ func RunMigrations(db *gorm.DB) error {
 		&models.Transaction{},
 		&models.Admin{},
 		&models.TradingSignal{},
+		&models.UserSignal{}, // 🆕 New table for user-specific signal status
 		&models.WebhookPrefix{},
 		&models.SystemLog{},
 		&models.ExchangeAPIConfig{},

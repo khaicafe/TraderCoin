@@ -13,6 +13,7 @@ import {
   KeyIcon,
   CpuChipIcon,
   BellAlertIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
@@ -28,6 +29,7 @@ const navigation = [
   },
   // {name: 'Monitoring', href: '/monitoring', icon: ChartBarSquareIcon},
   {name: 'Nhật Ký / Lỗi', href: '/logs', icon: DocumentTextIcon},
+  {name: 'Cài Đặt', href: '/settings', icon: Cog6ToothIcon},
 ];
 
 export default function Sidebar() {

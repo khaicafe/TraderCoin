@@ -901,47 +901,66 @@ export default function SignalsPage() {
                         {signal.strategy || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
-                            signal.status,
-                          )}`}>
-                          {signal.status.toUpperCase()}
-                        </span>
-                        {signal.order_id && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Order #{signal.order_id}
-                          </div>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
+                              signal.status,
+                            )}`}>
+                            {signal.status.toUpperCase()}
+                          </span>
+                          {signal.order_id && (
+                            <div className="text-xs text-gray-500">
+                              Order #{signal.order_id}
+                            </div>
+                          )}
+                          {signal.executed_by_user_id &&
+                            signal.executed_by_user_id !== currentUserId && (
+                              <div className="text-xs text-blue-600 italic">
+                                Đã đặt bởi User #{signal.executed_by_user_id}
+                              </div>
+                            )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex items-center gap-2">
+                          {/* Signal PENDING - luôn cho phép đặt lệnh */}
                           {signal.status === 'pending' && (
-                            // {signal.status === 'failed' && (
-                            <>
-                              <button
-                                onClick={() => handleExecuteSignal(signal.id)}
-                                // disabled={
-                                //   !selectedBotConfig ||
-                                //   executing === signal.id ||
-                                //   (signal.executed_by_user_id ===
-                                //     currentUserId &&
-                                //     currentUserId !== null)
-                                // }
-                                className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold"
-                                title={
-                                  signal.executed_by_user_id ===
-                                    currentUserId && currentUserId !== null
-                                    ? 'Bạn đã đặt lệnh cho signal này'
-                                    : undefined
-                                }>
-                                {executing === signal.id
-                                  ? '⏳'
-                                  : signal.executed_by_user_id ===
-                                      currentUserId && currentUserId !== null
-                                  ? '✅ Đã đặt'
-                                  : '✅ Đặt lệnh'}
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleExecuteSignal(signal.id)}
+                              disabled={
+                                !selectedBotConfig || executing === signal.id
+                              }
+                              className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold">
+                              {executing === signal.id ? '⏳' : '✅ Đặt lệnh'}
+                            </button>
+                          )}
+
+                          {/* Signal FAILED - cho phép đặt lại */}
+                          {signal.status === 'failed' && (
+                            <button
+                              onClick={() => handleExecuteSignal(signal.id)}
+                              disabled={
+                                !selectedBotConfig || executing === signal.id
+                              }
+                              className="px-3 py-1 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold">
+                              {executing === signal.id ? '⏳' : '🔄 Đặt lại'}
+                            </button>
+                          )}
+
+                          {/* Signal EXECUTED - hiển thị status */}
+                          {signal.status === 'executed' && (
+                            <div className="px-3 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                              {signal.executed_by_user_id === currentUserId
+                                ? '✅ Bạn đã đặt lệnh'
+                                : `✅ User #${signal.executed_by_user_id} đã đặt`}
+                            </div>
+                          )}
+
+                          {/* Signal IGNORED - không có action */}
+                          {signal.status === 'ignored' && (
+                            <div className="px-3 py-1 bg-gray-100 text-gray-500 rounded text-xs italic">
+                              Đã bỏ qua
+                            </div>
                           )}
                         </div>
                       </td>

@@ -12,6 +12,7 @@ type User struct {
 	PasswordHash    string         `gorm:"not null;size:255" json:"-"`
 	FullName        string         `gorm:"size:255" json:"full_name"`
 	Phone           string         `gorm:"size:50" json:"phone"`
+	ChatID          string         `gorm:"size:100" json:"chat_id"` // Telegram Chat ID
 	Status          string         `gorm:"size:50;default:active" json:"status"`
 	SubscriptionEnd *time.Time     `json:"subscription_end"`
 	CreatedAt       time.Time      `json:"created_at"`
@@ -23,6 +24,7 @@ type User struct {
 	TradingConfigs []TradingConfig `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	Orders         []Order         `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 	Transactions   []Transaction   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+	UserSignals    []UserSignal    `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
 type ExchangeKey struct {
@@ -136,26 +138,42 @@ type Admin struct {
 }
 
 type TradingSignal struct {
-	ID               uint      `gorm:"primaryKey" json:"id"`
-	Symbol           string    `gorm:"not null;size:50;index" json:"symbol"`
-	Action           string    `gorm:"not null;size:20" json:"action"` // buy, sell, close
-	Price            float64   `gorm:"type:decimal(20,8)" json:"price"`
-	StopLoss         float64   `gorm:"type:decimal(20,8)" json:"stop_loss"`
-	TakeProfit       float64   `gorm:"type:decimal(20,8)" json:"take_profit"`
-	Message          string    `gorm:"type:text" json:"message"`
-	Strategy         string    `gorm:"size:100" json:"strategy"`
-	Status           string    `gorm:"size:20;default:pending;index" json:"status"` // pending, executed, failed, ignored
-	OrderID          *uint     `gorm:"index" json:"order_id"`
-	ExecutedByUserID *uint     `gorm:"index" json:"executed_by_user_id"` // Track which user executed this signal
-	ErrorMessage     string    `gorm:"type:text" json:"error_message"`
-	WebhookPrefix    string    `gorm:"size:64;index" json:"webhook_prefix"`
-	ReceivedAt       time.Time `gorm:"not null;index" json:"received_at"`
-	ExecutedAt       time.Time `json:"executed_at"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	Symbol        string    `gorm:"not null;size:50;index" json:"symbol"`
+	Action        string    `gorm:"not null;size:20" json:"action"` // buy, sell, close
+	Price         float64   `gorm:"type:decimal(20,8)" json:"price"`
+	StopLoss      float64   `gorm:"type:decimal(20,8)" json:"stop_loss"`
+	TakeProfit    float64   `gorm:"type:decimal(20,8)" json:"take_profit"`
+	Message       string    `gorm:"type:text" json:"message"`
+	Strategy      string    `gorm:"size:100" json:"strategy"`
+	WebhookPrefix string    `gorm:"size:64;index" json:"webhook_prefix"`
+	ReceivedAt    time.Time `gorm:"not null;index" json:"received_at"`
+	RawPayload    string    `gorm:"type:text" json:"raw_payload"` // Store original webhook JSON
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 
 	// Relationships
-	Order *Order `gorm:"foreignKey:OrderID" json:"order,omitempty"`
+	UserSignals []UserSignal `gorm:"foreignKey:SignalID;constraint:OnDelete:CASCADE" json:"user_signals,omitempty"`
+}
+
+// UserSignal tracks each user's interaction with a signal (many-to-many with status)
+type UserSignal struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	UserID      uint       `gorm:"not null;index:idx_user_signal,unique" json:"user_id"`
+	SignalID    uint       `gorm:"not null;index:idx_user_signal,unique;index" json:"signal_id"`
+	Status      string     `gorm:"size:20;default:pending;index" json:"status"` // pending, executed, failed, ignored
+	BotConfigID *uint      `gorm:"index" json:"bot_config_id"`                  // Which bot config was used
+	OrderID     *uint      `gorm:"index" json:"order_id"`                       // Link to order if executed
+	ExecutedAt  *time.Time `json:"executed_at"`
+	ErrorMsg    string     `gorm:"type:text" json:"error_msg"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+
+	// Relationships
+	User   User           `gorm:"foreignKey:UserID" json:"-"`
+	Signal TradingSignal  `gorm:"foreignKey:SignalID" json:"signal,omitempty"`
+	Order  *Order         `gorm:"foreignKey:OrderID" json:"order,omitempty"`
+	Config *TradingConfig `gorm:"foreignKey:BotConfigID" json:"config,omitempty"`
 }
 
 // WebhookPrefix associates a unique webhook prefix with a user

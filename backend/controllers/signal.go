@@ -39,7 +39,7 @@ func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHu
 		utils.LogInfo(fmt.Sprintf("📡 TradingView Signal Received: %s %s @ %.2f",
 			payload.Action, payload.Symbol, payload.Price))
 
-		// Create signal record
+		// Create signal record (NO STATUS - shared by all users)
 		signal := models.TradingSignal{
 			Symbol:        payload.Symbol,
 			Action:        payload.Action,
@@ -48,7 +48,6 @@ func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHu
 			TakeProfit:    payload.TakeProfit,
 			Message:       payload.Message,
 			Strategy:      payload.Strategy,
-			Status:        "pending",
 			ReceivedAt:    time.Now(),
 			WebhookPrefix: prefix,
 		}
@@ -93,10 +92,24 @@ func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHu
 	}
 }
 
-// ListSignals returns all trading signals
+// ListSignals returns all trading signals with user-specific status
 func ListSignals(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var signals []models.TradingSignal
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		// Response struct with signal + user status
+		type SignalWithStatus struct {
+			models.TradingSignal
+			Status           string     `json:"status"`              // From user_signals
+			OrderID          *uint      `json:"order_id"`            // From user_signals
+			ExecutedByUserID *uint      `json:"executed_by_user_id"` // From user_signals.user_id
+			ExecutedAt       *time.Time `json:"executed_at"`         // From user_signals
+			ErrorMessage     string     `json:"error_message"`       // From user_signals
+		}
 
 		// Query params
 		status := c.Query("status")
@@ -105,39 +118,47 @@ func ListSignals(services *services.Services) gin.HandlerFunc {
 		limitStr := c.DefaultQuery("limit", "50")
 		limit, _ := strconv.Atoi(limitStr)
 		sinceHoursStr := c.Query("since_hours")
-		sinceTsStr := c.Query("since_ts") // optional: unix seconds or milliseconds from client 'now'
+		sinceTsStr := c.Query("since_ts")
 
-		query := services.DB.Order("received_at DESC")
+		// Base query: LEFT JOIN to get all signals + user status if exists
+		query := services.DB.Table("trading_signals").
+			Select(`trading_signals.*, 
+				COALESCE(user_signals.status, 'pending') as status,
+				user_signals.order_id,
+				user_signals.user_id as executed_by_user_id,
+				user_signals.executed_at,
+				user_signals.error_msg as error_message`).
+			Joins("LEFT JOIN user_signals ON user_signals.signal_id = trading_signals.id AND user_signals.user_id = ?", userID).
+			Order("trading_signals.received_at DESC")
 
 		if status != "" {
-			query = query.Where("status = ?", status)
+			query = query.Where("COALESCE(user_signals.status, 'pending') = ?", status)
 		}
 		if symbol != "" {
-			query = query.Where("symbol = ?", symbol)
+			query = query.Where("trading_signals.symbol = ?", symbol)
 		}
 		if prefix != "" {
-			query = query.Where("webhook_prefix = ?", prefix)
+			query = query.Where("trading_signals.webhook_prefix = ?", prefix)
 		}
 
 		if sinceTsStr != "" {
-			// Accept unix seconds or milliseconds
 			if ts, err := strconv.ParseInt(sinceTsStr, 10, 64); err == nil && ts > 0 {
 				var cutoff time.Time
-				// Heuristic: treat > 1e12 as milliseconds
 				if ts > 1_000_000_000_000 {
 					cutoff = time.UnixMilli(ts)
 				} else {
 					cutoff = time.Unix(ts, 0)
 				}
-				query = query.Where("received_at >= ?", cutoff)
+				query = query.Where("trading_signals.received_at >= ?", cutoff)
 			}
 		} else if sinceHoursStr != "" {
 			if hrs, err := strconv.ParseFloat(sinceHoursStr, 64); err == nil && hrs > 0 {
 				cutoff := time.Now().Add(-time.Duration(hrs * float64(time.Hour)))
-				query = query.Where("received_at >= ?", cutoff)
+				query = query.Where("trading_signals.received_at >= ?", cutoff)
 			}
 		}
 
+		var signals []SignalWithStatus
 		if err := query.Limit(limit).Find(&signals).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch signals"})
 			return
@@ -260,10 +281,14 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
-		// Validate signal is not already executed
-		if signal.Status == "executed" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Signal already executed"})
-			return
+		// Check if user already executed this signal
+		var existingUserSignal models.UserSignal
+		if err := services.DB.Where("user_id = ? AND signal_id = ?", userID, signalID).First(&existingUserSignal).Error; err == nil {
+			// User already has a record for this signal
+			if existingUserSignal.Status == "executed" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "You already executed this signal"})
+				return
+			}
 		}
 
 		utils.LogInfo(fmt.Sprintf("🎯 Executing signal %d with bot config %d", signalID, payload.BotConfigID))
@@ -285,10 +310,17 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		// Use config amount
 		amount := config.Amount
 		if amount <= 0 {
-			signal.Status = "failed"
-			signal.ErrorMessage = "Bot config amount must be greater than 0"
-			signal.ExecutedAt = time.Now()
-			services.DB.Save(&signal)
+			// Create failed UserSignal record
+			now := time.Now()
+			userSignal := models.UserSignal{
+				UserID:      userID.(uint),
+				SignalID:    uint(signalID),
+				Status:      "failed",
+				BotConfigID: &config.ID,
+				ExecutedAt:  &now,
+				ErrorMsg:    "Bot config amount must be greater than 0",
+			}
+			services.DB.Create(&userSignal)
 
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "Bot config amount must be greater than 0",
@@ -314,11 +346,17 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		if !orderResult.Success {
 			utils.LogError(fmt.Sprintf("❌ Failed to execute signal: %v", orderResult.Error))
 
-			// Update signal status to failed
-			signal.Status = "failed"
-			signal.ErrorMessage = orderResult.Error
-			signal.ExecutedAt = time.Now()
-			services.DB.Save(&signal)
+			// Create failed UserSignal record
+			now := time.Now()
+			userSignal := models.UserSignal{
+				UserID:      userID.(uint),
+				SignalID:    uint(signalID),
+				Status:      "failed",
+				BotConfigID: &config.ID,
+				ExecutedAt:  &now,
+				ErrorMsg:    orderResult.Error,
+			}
+			services.DB.Create(&userSignal)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "Failed to place order",
@@ -378,10 +416,16 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		}
 
 		if err := services.DB.Create(&order).Error; err != nil {
-			signal.Status = "failed"
-			signal.ErrorMessage = fmt.Sprintf("Failed to create order record: %v", err)
-			signal.ExecutedAt = time.Now()
-			services.DB.Save(&signal)
+			now := time.Now()
+			userSignal := models.UserSignal{
+				UserID:      userID.(uint),
+				SignalID:    uint(signalID),
+				Status:      "failed",
+				BotConfigID: &config.ID,
+				ExecutedAt:  &now,
+				ErrorMsg:    fmt.Sprintf("Failed to create order record: %v", err),
+			}
+			services.DB.Create(&userSignal)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to create order record",
@@ -391,15 +435,21 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 
 		//////////////////////////////////////////////////////////////////////
 
-		// Update signal status
-		uid := userID.(uint)
-		signal.Status = "executed"
-		signal.OrderID = &order.ID
-		signal.ExecutedByUserID = &uid
-		signal.ExecutedAt = time.Now()
-		services.DB.Save(&signal)
+		// Create UserSignal record for this user
+		now := time.Now()
+		userSignal := models.UserSignal{
+			UserID:      userID.(uint),
+			SignalID:    uint(signalID),
+			Status:      "executed",
+			BotConfigID: &config.ID,
+			OrderID:     &order.ID,
+			ExecutedAt:  &now,
+		}
+		if err := services.DB.Create(&userSignal).Error; err != nil {
+			utils.LogError(fmt.Sprintf("❌ Failed to create UserSignal: %v", err))
+		}
 
-		utils.LogInfo(fmt.Sprintf("✅ Signal %d executed successfully, Order ID: %d", signalID, order.ID))
+		utils.LogInfo(fmt.Sprintf("✅ Signal %d executed successfully by user %d, Order ID: %d", signalID, userID, order.ID))
 
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "success",
@@ -410,10 +460,21 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 	}
 }
 
-// UpdateSignalStatus updates the status of a signal (mark as ignored, etc.)
+// UpdateSignalStatus updates the status of a signal for current user (mark as ignored, etc.)
 func UpdateSignalStatus(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		signalID := c.Param("id")
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+
+		signalIDStr := c.Param("id")
+		signalID, err := strconv.Atoi(signalIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signal ID"})
+			return
+		}
 
 		var payload struct {
 			Status string `json:"status" binding:"required"`
@@ -424,19 +485,41 @@ func UpdateSignalStatus(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
+		// Check if signal exists
 		var signal models.TradingSignal
 		if err := services.DB.First(&signal, signalID).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Signal not found"})
 			return
 		}
 
-		signal.Status = payload.Status
-		if err := services.DB.Save(&signal).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update signal"})
-			return
+		// Create or update UserSignal record for this user
+		var userSignal models.UserSignal
+		result := services.DB.Where("user_id = ? AND signal_id = ?", userID, signalID).First(&userSignal)
+
+		if result.Error != nil {
+			// Create new UserSignal
+			userSignal = models.UserSignal{
+				UserID:   userID.(uint),
+				SignalID: uint(signalID),
+				Status:   payload.Status,
+			}
+			if err := services.DB.Create(&userSignal).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user signal"})
+				return
+			}
+		} else {
+			// Update existing UserSignal
+			userSignal.Status = payload.Status
+			if err := services.DB.Save(&userSignal).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user signal"})
+				return
+			}
 		}
 
-		c.JSON(http.StatusOK, signal)
+		c.JSON(http.StatusOK, gin.H{
+			"signal":      signal,
+			"user_status": userSignal.Status,
+		})
 	}
 }
 

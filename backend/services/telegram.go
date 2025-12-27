@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"tradercoin/backend/models"
+	"tradercoin/backend/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/gorm"
@@ -310,8 +311,8 @@ func (s *TelegramService) TestConnection(botToken, chatID string) error {
 		// ),
 		// Row 4: Quick Trade Buttons (với callback_data)
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🟢 ETH/USDT BUY", "trade_BUY_ETHUSDT"),
-			tgbotapi.NewInlineKeyboardButtonData("🔴 ETH/USDT SELL", "trade_SELL_ETHUSDT"),
+			tgbotapi.NewInlineKeyboardButtonData("🟢 DOGE/USDT BUY", "trade_BUY_DOGEUSDT"),
+			tgbotapi.NewInlineKeyboardButtonData("🔴 DOGE/USDT SELL", "trade_SELL_DOGEUSDT"),
 		),
 		// Row 5: More Trade Buttons
 		// tgbotapi.NewInlineKeyboardRow(
@@ -358,16 +359,44 @@ func (s *TelegramService) HandleUpdates(botToken string) error {
 			// Parse callback data: trade_BUY_ETHUSDT hoặc trade_SELL_BTCUSDT
 			parts := strings.Split(callback.Data, "_")
 			if len(parts) == 3 && parts[0] == "trade" {
-				side := parts[1]   // BUY hoặc SELL
-				symbol := parts[2] // ETHUSDT, BTCUSDT, etc.
+				side := strings.ToLower(parts[1]) // buy hoặc sell
+				symbol := parts[2]                // ETHUSDT, BTCUSDT, etc.
 
-				// Tạo response message
-				responseText := fmt.Sprintf("✅ Đã nhận lệnh %s %s!\n\n", side, symbol)
-				responseText += "⚠️ <i>Đây là test mode, chưa thực hiện giao dịch thật.</i>\n\n"
-				responseText += "Để thực hiện giao dịch thật, bạn cần:\n"
-				responseText += "1. Cấu hình Exchange API Key\n"
-				responseText += "2. Có đủ số dư trong tài khoản\n"
-				responseText += "3. Bật chế độ live trading"
+				// Lấy user ID từ Telegram chat ID
+				userID, err := s.getUserIDFromChatID(callback.From.ID)
+				if err != nil {
+					responseText := fmt.Sprintf("❌ Không tìm thấy user. Lỗi: %v", err)
+					msg := tgbotapi.NewMessage(callback.Message.Chat.ID, responseText)
+					msg.ParseMode = "HTML"
+					bot.Send(msg)
+
+					callbackConfig := tgbotapi.NewCallback(callback.ID, "❌ User not found")
+					bot.Request(callbackConfig)
+					continue
+				}
+
+				// Đặt lệnh qua hàm PlaceOrderFromTelegram
+				orderResult, err := s.PlaceOrderFromTelegram(userID, symbol, side, "market", 0, 0)
+				if err != nil {
+					responseText := fmt.Sprintf("❌ Lỗi đặt lệnh %s %s:\n<code>%v</code>", side, symbol, err)
+					msg := tgbotapi.NewMessage(callback.Message.Chat.ID, responseText)
+					msg.ParseMode = "HTML"
+					bot.Send(msg)
+
+					callbackConfig := tgbotapi.NewCallback(callback.ID, fmt.Sprintf("❌ Lỗi: %s", side))
+					bot.Request(callbackConfig)
+					continue
+				}
+
+				// Tạo response message với thông tin order
+				responseText := "✅ <b>Đặt lệnh thành công!</b>\n\n"
+				responseText += fmt.Sprintf("Symbol: <b>%s</b>\n", orderResult.Symbol)
+				responseText += fmt.Sprintf("Side: <b>%s</b>\n", strings.ToUpper(orderResult.Side))
+				responseText += fmt.Sprintf("Type: <b>%s</b>\n", strings.ToUpper(orderResult.Type))
+				responseText += fmt.Sprintf("Quantity: <b>%v</b>\n", orderResult.Quantity)
+				responseText += fmt.Sprintf("Price: <b>%v</b>\n", orderResult.FilledPrice)
+				responseText += fmt.Sprintf("Status: <b>%s</b>\n", orderResult.Status)
+				responseText += fmt.Sprintf("Order ID: <code>%s</code>", orderResult.OrderID)
 
 				// Send confirmation message
 				msg := tgbotapi.NewMessage(callback.Message.Chat.ID, responseText)
@@ -378,7 +407,7 @@ func (s *TelegramService) HandleUpdates(botToken string) error {
 				callbackConfig := tgbotapi.NewCallback(callback.ID, fmt.Sprintf("✅ %s %s", side, symbol))
 				bot.Request(callbackConfig)
 
-				log.Printf("✅ Processed: %s %s", side, symbol)
+				log.Printf("✅ Order placed: %s %s - OrderID: %s", side, symbol, orderResult.OrderID)
 			} else {
 				// Unknown callback data
 				callbackConfig := tgbotapi.NewCallback(callback.ID, "❌ Unknown command")
@@ -389,4 +418,124 @@ func (s *TelegramService) HandleUpdates(botToken string) error {
 	}
 
 	return nil
+}
+
+// getUserIDFromChatID lấy UserID từ Telegram Chat ID
+func (s *TelegramService) getUserIDFromChatID(telegramUserID int64) (uint, error) {
+	var config models.TelegramConfig
+	// ChatID được lưu dạng string trong database
+	chatIDStr := fmt.Sprintf("%d", telegramUserID)
+
+	err := s.db.Where("chat_id = ? AND is_enabled = ?", chatIDStr, true).First(&config).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return 0, fmt.Errorf("không tìm thấy cấu hình Telegram cho chat ID: %d", telegramUserID)
+		}
+		return 0, fmt.Errorf("lỗi truy vấn database: %w", err)
+	}
+
+	return config.UserID, nil
+}
+
+// PlaceOrderFromTelegram đặt lệnh từ Telegram bot
+func (s *TelegramService) PlaceOrderFromTelegram(userID uint, symbol, side, orderType string, amount, price float64) (*OrderResult, error) {
+	// Lấy bot config đầu tiên của user (hoặc có thể lấy theo default)
+	var config models.TradingConfig
+	err := s.db.Where("user_id = ? AND is_active = ? AND symbol = ? AND is_default = ?", userID, true, symbol, true).
+		First(&config).Error
+
+	if err == gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("lỗi truy vấn bot config (chưa set bot config default)")
+	}
+
+	// Kiểm tra API credentials
+	if config.APIKey == "" || config.APISecret == "" {
+		return nil, fmt.Errorf("bot config thiếu API credentials")
+	}
+
+	// Sử dụng amount từ config nếu không được cung cấp
+	if amount <= 0 {
+		amount = config.Amount
+	}
+
+	if amount <= 0 {
+		return nil, fmt.Errorf("amount phải lớn hơn 0")
+	}
+
+	// Giải mã API credentials
+	apiKey, err := utils.DecryptString(config.APIKey)
+	if err != nil {
+		return nil, fmt.Errorf("lỗi giải mã API key: %w", err)
+	}
+
+	apiSecret, err := utils.DecryptString(config.APISecret)
+	if err != nil {
+		return nil, fmt.Errorf("lỗi giải mã API secret: %w", err)
+	}
+
+	// Tạo trading service và đặt lệnh
+	tradingService := NewTradingService(apiKey, apiSecret, config.Exchange, s.db, userID)
+	orderResult := tradingService.PlaceOrder(&config, side, orderType, symbol, amount, price)
+
+	if !orderResult.Success {
+		errorMsg := orderResult.Error
+		if errorMsg == "" {
+			errorMsg = "Đặt lệnh thất bại"
+		}
+		return nil, fmt.Errorf("%s", errorMsg)
+	}
+
+	// Tính toán SL/TP prices
+	var stopLoss, takeProfit float64
+	filledPrice := orderResult.FilledPrice
+	if filledPrice > 0 {
+		if config.StopLossPercent > 0 {
+			if side == "buy" {
+				stopLoss = filledPrice * (1 - config.StopLossPercent/100)
+			} else {
+				stopLoss = filledPrice * (1 + config.StopLossPercent/100)
+			}
+		}
+
+		if config.TakeProfitPercent > 0 {
+			if side == "buy" {
+				takeProfit = filledPrice * (1 + config.TakeProfitPercent/100)
+			} else {
+				takeProfit = filledPrice * (1 - config.TakeProfitPercent/100)
+			}
+		}
+	}
+
+	// Lưu order vào database
+	order := models.Order{
+		UserID:           userID,
+		BotConfigID:      config.ID,
+		Exchange:         config.Exchange,
+		Symbol:           orderResult.Symbol,
+		OrderID:          orderResult.OrderID,
+		Side:             orderResult.Side,
+		Type:             orderResult.Type,
+		Quantity:         orderResult.Quantity,
+		Price:            orderResult.Price,
+		FilledPrice:      orderResult.FilledPrice,
+		Status:           orderResult.Status,
+		TradingMode:      config.TradingMode,
+		Leverage:         config.Leverage,
+		StopLossPrice:    stopLoss,
+		TakeProfitPrice:  takeProfit,
+		AlgoIDStopLoss:   orderResult.AlgoIDStopLoss,
+		AlgoIDTakeProfit: orderResult.AlgoIDTakeProfit,
+		PnL:              0,
+		PnLPercent:       0,
+	}
+
+	if err := s.db.Create(&order).Error; err != nil {
+		log.Printf("⚠️ Lỗi lưu order vào database: %v", err)
+		// Không return error vì order đã được đặt thành công trên exchange
+	}
+
+	log.Printf("✅ Order từ Telegram đã được đặt: OrderID=%s, Symbol=%s, Side=%s, Amount=%f",
+		orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity)
+
+	return &orderResult, nil
 }
