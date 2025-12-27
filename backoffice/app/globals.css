@@ -1,8 +1,18 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
-  --background: #ffffff;
+  --background: #f5f5f5;
   --foreground: #171717;
+
+  /* Shopee Color Palette */
+  --shopee-primary: #ee4d2d;
+  --shopee-primary-hover: #d73211;
+  --shopee-secondary: #fb6445;
+  --shopee-accent: #ff6633;
+  --shopee-dark: #2f1d1a;
+  --shopee-light: #fff4f0;
+  --shopee-orange-gradient-start: #ff6e44;
+  --shopee-orange-gradient-end: #ee4d2d;
 }
 
 @theme inline {
@@ -10,11 +20,17 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Custom Shopee Colors */
+  --color-shopee-primary: var(--shopee-primary);
+  --color-shopee-secondary: var(--shopee-secondary);
+  --color-shopee-dark: var(--shopee-dark);
+  --color-shopee-light: var(--shopee-light);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #1a1a1a;
     --foreground: #ededed;
   }
 }
@@ -22,5 +38,23 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Shopee-style gradients */
+.bg-shopee-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--shopee-orange-gradient-start) 0%,
+    var(--shopee-orange-gradient-end) 100%
+  );
+}
+
+.bg-shopee-gradient-horizontal {
+  background: linear-gradient(
+    90deg,
+    var(--shopee-orange-gradient-start) 0%,
+    var(--shopee-orange-gradient-end) 100%
+  );
 }

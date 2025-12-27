@@ -396,3 +396,40 @@ func CloseOrdersBySymbol(svc *services.Services) gin.HandlerFunc {
 		})
 	}
 }
+
+// GetAllOrdersAdmin - Admin endpoint to get all orders from all users
+func GetAllOrdersAdmin(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get pagination params
+		skipStr := c.DefaultQuery("skip", "0")
+		limitStr := c.DefaultQuery("limit", "100")
+
+		skip, err := strconv.Atoi(skipStr)
+		if err != nil || skip < 0 {
+			skip = 0
+		}
+
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit < 1 || limit > 1000 {
+			limit = 100
+		}
+
+		// Query all orders (no user_id filter)
+		var orders []models.Order
+		if err := services.DB.
+			Order("created_at desc").
+			Offset(skip).
+			Limit(limit).
+			Find(&orders).Error; err != nil {
+			log.Printf("Error listing all orders: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch orders"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"orders":  orders,
+			"count":   len(orders),
+		})
+	}
+}

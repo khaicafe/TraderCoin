@@ -58,13 +58,13 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-orange-100 to-orange-200 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <div className="text-center mb-8">
-            <div className="inline-block p-4 bg-slate-100 rounded-full mb-4">
+            <div className="inline-block p-4 bg-gradient-to-br from-orange-300 to-orange-400 rounded-full mb-4 shadow-lg">
               <svg
-                className="w-12 h-12 text-slate-700"
+                className="w-12 h-12 text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor">
@@ -76,7 +76,7 @@ export default function AdminLoginPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Admin Portal
             </h1>
             <p className="text-gray-600">TraderCoin Backoffice</p>
@@ -100,7 +100,7 @@ export default function AdminLoginPage() {
                 onChange={(e) =>
                   setFormData({...formData, email: e.target.value})
                 }
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-slate-600 focus:outline-none text-gray-900 bg-white"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#EE4D2D] focus:outline-none text-gray-900 bg-white transition-colors"
                 placeholder="admin@tradercoin.com"
               />
             </div>
@@ -116,7 +116,7 @@ export default function AdminLoginPage() {
                 onChange={(e) =>
                   setFormData({...formData, password: e.target.value})
                 }
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-slate-600 focus:outline-none text-gray-900 bg-white"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#EE4D2D] focus:outline-none text-gray-900 bg-white transition-colors"
                 placeholder="••••••••"
               />
             </div>
@@ -124,7 +124,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50">
+              className="w-full bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white font-bold py-3 rounded-lg transition-all shadow-lg hover:shadow-xl disabled:opacity-50">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg
@@ -157,7 +157,7 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        <div className="text-center mt-6 text-sm text-gray-300">
+        <div className="text-center mt-6 text-sm text-white/90">
           <p>© 2025 TraderCoin Backoffice. All rights reserved.</p>
         </div>
       </div>

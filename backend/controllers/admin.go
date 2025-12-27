@@ -96,18 +96,33 @@ func GetAllUsers(services *services.Services) gin.HandlerFunc {
 
 		result := make([]map[string]interface{}, 0, len(users))
 		for _, user := range users {
+			// Calculate subscription status
+			isSubscriptionActive := false
+			daysRemaining := 0
+			if user.SubscriptionEnd != nil {
+				if user.SubscriptionEnd.After(time.Now()) {
+					isSubscriptionActive = true
+					daysRemaining = int(time.Until(*user.SubscriptionEnd).Hours() / 24)
+				}
+			}
+
 			result = append(result, map[string]interface{}{
-				"id":               user.ID,
-				"email":            user.Email,
-				"full_name":        user.FullName,
-				"phone":            user.Phone,
-				"status":           user.Status,
-				"subscription_end": user.SubscriptionEnd,
-				"created_at":       user.CreatedAt,
+				"id":                     user.ID,
+				"email":                  user.Email,
+				"full_name":              user.FullName,
+				"phone":                  user.Phone,
+				"status":                 user.Status,
+				"subscription_end":       user.SubscriptionEnd,
+				"is_subscription_active": isSubscriptionActive,
+				"days_remaining":         daysRemaining,
+				"created_at":             user.CreatedAt,
 			})
 		}
 
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, gin.H{
+			"users": result,
+			"total": len(result),
+		})
 	}
 }
 
@@ -260,6 +275,139 @@ func GetStatistics(services *services.Services) gin.HandlerFunc {
 			},
 			"exchange_keys": gin.H{
 				"total": totalKeys,
+			},
+		})
+	}
+}
+
+// ExtendUserSubscription - Gia hạn subscription cho user (Admin only)
+func ExtendUserSubscription(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+
+		var input struct {
+			Days int `json:"days" binding:"required,min=1"`
+		}
+
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Days must be a positive number"})
+			return
+		}
+
+		// Get user
+		var user models.User
+		if err := services.DB.First(&user, userID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		// Calculate new subscription end date
+		var newEndDate time.Time
+		if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(time.Now()) {
+			// Extend from current end date if still valid
+			newEndDate = user.SubscriptionEnd.AddDate(0, 0, input.Days)
+		} else {
+			// Start from now if expired or no subscription
+			newEndDate = time.Now().AddDate(0, 0, input.Days)
+		}
+
+		// Update user subscription
+		user.SubscriptionEnd = &newEndDate
+		if err := services.DB.Save(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to extend subscription"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":          "Subscription extended successfully",
+			"subscription_end": newEndDate,
+			"extended_days":    input.Days,
+		})
+	}
+}
+
+// SuspendUser - Khóa user (Admin only)
+func SuspendUser(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+
+		var input struct {
+			Reason string `json:"reason"`
+		}
+
+		c.ShouldBindJSON(&input)
+
+		// Get user
+		var user models.User
+		if err := services.DB.First(&user, userID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		// Update status
+		user.Status = "suspended"
+		if err := services.DB.Save(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to suspend user"})
+			return
+		}
+
+		// Log action
+		utils.LogInfo("Admin suspended user: " + user.Email)
+		if input.Reason != "" {
+			utils.LogInfo("Reason: " + input.Reason)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "User suspended successfully",
+			"user": gin.H{
+				"id":     user.ID,
+				"email":  user.Email,
+				"status": user.Status,
+			},
+		})
+	}
+}
+
+// ActivateUser - Kích hoạt lại user (Admin only)
+func ActivateUser(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+
+		// Get user
+		var user models.User
+		if err := services.DB.First(&user, userID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		// Update status
+		user.Status = "active"
+		if err := services.DB.Save(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to activate user"})
+			return
+		}
+
+		// Log action
+		utils.LogInfo("Admin activated user: " + user.Email)
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "User activated successfully",
+			"user": gin.H{
+				"id":     user.ID,
+				"email":  user.Email,
+				"status": user.Status,
 			},
 		})
 	}

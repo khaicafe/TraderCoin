@@ -9,6 +9,12 @@ import (
 )
 
 func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *services.WebSocketHub) {
+	// Inject services into context for all routes
+	router.Use(func(c *gin.Context) {
+		c.Set("services", services)
+		c.Next()
+	})
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
@@ -147,8 +153,12 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			admin.POST("/login", controllers.AdminLogin(services))
 			admin.GET("/users", controllers.GetAllUsers(services))
 			admin.PUT("/users/:id/status", controllers.UpdateUserStatus(services))
+			admin.POST("/users/:id/suspend", controllers.SuspendUser(services))           // Khóa user
+			admin.POST("/users/:id/activate", controllers.ActivateUser(services))         // Kích hoạt user
+			admin.POST("/users/:id/extend", controllers.ExtendUserSubscription(services)) // Gia hạn subscription
 			admin.GET("/transactions", controllers.GetAllTransactions(services))
 			admin.GET("/statistics", controllers.GetStatistics(services))
+			admin.GET("/orders", controllers.GetAllOrdersAdmin(services)) // Get all orders from all users
 		}
 
 		// ============ TRADING SIGNALS ROUTES ============
@@ -183,6 +193,26 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			logs.GET("", controllers.GetSystemLogs(services))            // Get system logs
 			logs.GET("/stats", controllers.GetSystemLogStats(services))  // Get log statistics
 			logs.DELETE("/clear", controllers.ClearSystemLogs(services)) // Clear old logs
+		}
+
+		// ============ EXCHANGE CONFIG ROUTES ============
+		// Prefix: /api/v1/exchanges
+		exchanges := v1.Group("/exchanges")
+		{
+			// Public endpoints (for frontend dropdowns)
+			exchanges.GET("/supported", controllers.GetSupportedExchanges) // Get active exchanges list
+			exchanges.GET("", controllers.ListExchangeConfigs)             // List all exchange configs
+			exchanges.GET("/:exchange", controllers.GetExchangeConfig)     // Get specific exchange config
+
+			// Admin endpoints (TODO: Add AdminAuthMiddleware)
+			exchangesAdmin := exchanges.Group("")
+			exchangesAdmin.Use(middleware.AuthMiddleware())
+			{
+				exchangesAdmin.POST("", controllers.CreateExchangeConfig)             // Create exchange config
+				exchangesAdmin.PUT("/:id", controllers.UpdateExchangeConfig)          // Update exchange config
+				exchangesAdmin.DELETE("/:id", controllers.DeleteExchangeConfig)       // Delete exchange config
+				exchangesAdmin.PATCH("/:id/toggle", controllers.ToggleExchangeStatus) // Toggle exchange status
+			}
 		}
 	}
 }

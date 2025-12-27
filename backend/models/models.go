@@ -193,3 +193,31 @@ type SystemLog struct {
 	User  User   `gorm:"foreignKey:UserID" json:"-"`
 	Order *Order `gorm:"foreignKey:OrderID" json:"order,omitempty"`
 }
+
+// ExchangeAPIConfig stores API endpoint configurations for different exchanges
+type ExchangeAPIConfig struct {
+	ID                   uint           `gorm:"primaryKey" json:"id"`
+	Exchange             string         `gorm:"uniqueIndex;not null;size:50" json:"exchange"`       // binance, bingx, bittrex, okx, bybit, etc.
+	DisplayName          string         `gorm:"size:100" json:"display_name"`                       // Display name (e.g., "Binance", "BingX")
+	SpotAPIURL           string         `gorm:"size:255;not null" json:"spot_api_url"`              // Spot REST API base URL
+	SpotAPITestnetURL    string         `gorm:"size:255" json:"spot_api_testnet_url"`               // Spot Testnet REST API URL
+	SpotWSURL            string         `gorm:"size:255" json:"spot_ws_url"`                        // Spot WebSocket stream URL
+	SpotWSTestnetURL     string         `gorm:"size:255" json:"spot_ws_testnet_url"`                // Spot Testnet WebSocket URL
+	FuturesAPIURL        string         `gorm:"size:255" json:"futures_api_url"`                    // Futures REST API URL
+	FuturesAPITestnetURL string         `gorm:"size:255" json:"futures_api_testnet_url"`            // Futures Testnet REST API URL
+	FuturesWSURL         string         `gorm:"size:255" json:"futures_ws_url"`                     // Futures WebSocket URL
+	FuturesWSTestnetURL  string         `gorm:"size:255" json:"futures_ws_testnet_url"`             // Futures Testnet WebSocket URL
+	IsActive             bool           `gorm:"default:true" json:"is_active"`                      // Enable/disable exchange
+	SupportSpot          bool           `gorm:"default:true" json:"support_spot"`                   // Support spot trading
+	SupportFutures       bool           `gorm:"default:false" json:"support_futures"`               // Support futures trading
+	SupportMargin        bool           `gorm:"default:false" json:"support_margin"`                // Support margin trading
+	DefaultLeverage      int            `gorm:"default:1" json:"default_leverage"`                  // Default leverage
+	MaxLeverage          int            `gorm:"default:1" json:"max_leverage"`                      // Max leverage (e.g., 125 for Binance, 150 for BingX)
+	MinOrderSize         float64        `gorm:"type:decimal(20,8);default:0" json:"min_order_size"` // Minimum order size
+	MakerFee             float64        `gorm:"type:decimal(10,4);default:0.001" json:"maker_fee"`  // Maker fee (0.1% = 0.001)
+	TakerFee             float64        `gorm:"type:decimal(10,4);default:0.001" json:"taker_fee"`  // Taker fee (0.1% = 0.001)
+	Notes                string         `gorm:"type:text" json:"notes"`                             // Additional notes
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
+}

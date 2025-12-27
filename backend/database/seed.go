@@ -74,6 +74,83 @@ func SeedData(db *gorm.DB) error {
 		log.Println("ℹ️  User account already exists")
 	}
 
+	// Seed Exchange API Configurations
+	if err := SeedExchangeConfigs(db); err != nil {
+		log.Printf("Failed to seed exchange configs: %v", err)
+		return err
+	}
+
 	log.Println("✅ Sample data seeding completed!")
+	return nil
+}
+
+// SeedExchangeConfigs creates default exchange API configurations
+func SeedExchangeConfigs(db *gorm.DB) error {
+	log.Println("Seeding exchange API configurations...")
+
+	exchanges := []models.ExchangeAPIConfig{
+		{
+			Exchange:             "binance",
+			DisplayName:          "Binance",
+			SpotAPIURL:           "https://api.binance.com",
+			SpotAPITestnetURL:    "https://testnet.binance.vision",
+			SpotWSURL:            "wss://stream.binance.com:9443/ws",
+			SpotWSTestnetURL:     "wss://stream.testnet.binance.vision/ws",
+			FuturesAPIURL:        "https://fapi.binance.com",
+			FuturesAPITestnetURL: "https://testnet.binancefuture.com",
+			FuturesWSURL:         "wss://fstream.binance.com/ws",
+			FuturesWSTestnetURL:  "wss://stream.binancefuture.com/ws",
+			IsActive:             true,
+			SupportSpot:          true,
+			SupportFutures:       true,
+			SupportMargin:        true,
+			DefaultLeverage:      1,
+			MaxLeverage:          125,
+			MinOrderSize:         0.0001,
+			MakerFee:             0.001, // 0.1%
+			TakerFee:             0.001, // 0.1%
+			Notes:                "World's largest cryptocurrency exchange by trading volume",
+		},
+		{
+			Exchange:             "bingx",
+			DisplayName:          "BingX",
+			SpotAPIURL:           "https://open-api.bingx.com",
+			SpotAPITestnetURL:    "https://open-api-vst.bingx.com",
+			SpotWSURL:            "wss://open-api-ws.bingx.com/market",
+			SpotWSTestnetURL:     "wss://open-api-vst.bingx.com/market",
+			FuturesAPIURL:        "https://open-api.bingx.com",
+			FuturesAPITestnetURL: "https://open-api-vst.bingx.com",
+			FuturesWSURL:         "wss://open-api-swap.bingx.com/swap-market",
+			FuturesWSTestnetURL:  "wss://open-api-vst.bingx.com/swap-market",
+			IsActive:             true,
+			SupportSpot:          true,
+			SupportFutures:       true,
+			SupportMargin:        true,
+			DefaultLeverage:      1,
+			MaxLeverage:          150,
+			MinOrderSize:         0.0001,
+			MakerFee:             0.0002, // 0.02%
+			TakerFee:             0.0004, // 0.04%
+			Notes:                "Global crypto exchange with copy trading and derivatives",
+		},
+	}
+
+	for _, exchange := range exchanges {
+		// Check if exchange already exists
+		var count int64
+		db.Model(&models.ExchangeAPIConfig{}).Where("exchange = ?", exchange.Exchange).Count(&count)
+
+		if count == 0 {
+			if err := db.Create(&exchange).Error; err != nil {
+				log.Printf("❌ Failed to create exchange config for %s: %v", exchange.DisplayName, err)
+				return err
+			}
+			log.Printf("✅ Created exchange config: %s", exchange.DisplayName)
+		} else {
+			log.Printf("ℹ️  Exchange config already exists: %s", exchange.DisplayName)
+		}
+	}
+
+	log.Println("✅ Exchange API configurations seeding completed!")
 	return nil
 }
