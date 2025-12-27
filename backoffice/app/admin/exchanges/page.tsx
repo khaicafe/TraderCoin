@@ -144,10 +144,14 @@ export default function ExchangesManagement() {
       setFormData({
         exchange: '',
         display_name: '',
-        rest_api_url: '',
-        rest_api_testnet_url: '',
-        websocket_url: '',
+        spot_api_url: '',
+        spot_api_testnet_url: '',
+        spot_ws_url: '',
+        spot_ws_testnet_url: '',
         futures_api_url: '',
+        futures_api_testnet_url: '',
+        futures_ws_url: '',
+        futures_ws_testnet_url: '',
         is_active: true,
         support_spot: true,
         support_futures: false,
@@ -173,10 +177,14 @@ export default function ExchangesManagement() {
     setFormData({
       exchange: exchange.exchange,
       display_name: exchange.display_name,
-      rest_api_url: exchange.rest_api_url,
-      rest_api_testnet_url: exchange.rest_api_testnet_url,
-      websocket_url: exchange.websocket_url,
+      spot_api_url: exchange.spot_api_url,
+      spot_api_testnet_url: exchange.spot_api_testnet_url,
+      spot_ws_url: exchange.spot_ws_url,
+      spot_ws_testnet_url: exchange.spot_ws_testnet_url,
       futures_api_url: exchange.futures_api_url,
+      futures_api_testnet_url: exchange.futures_api_testnet_url,
+      futures_ws_url: exchange.futures_ws_url,
+      futures_ws_testnet_url: exchange.futures_ws_testnet_url,
       is_active: exchange.is_active,
       support_spot: exchange.support_spot,
       support_futures: exchange.support_futures,
@@ -217,10 +225,14 @@ export default function ExchangesManagement() {
       setFormData({
         exchange: '',
         display_name: '',
-        rest_api_url: '',
-        rest_api_testnet_url: '',
-        websocket_url: '',
+        spot_api_url: '',
+        spot_api_testnet_url: '',
+        spot_ws_url: '',
+        spot_ws_testnet_url: '',
         futures_api_url: '',
+        futures_api_testnet_url: '',
+        futures_ws_url: '',
+        futures_ws_testnet_url: '',
         is_active: true,
         support_spot: true,
         support_futures: false,
@@ -354,33 +366,23 @@ export default function ExchangesManagement() {
 
               {/* APIs */}
               <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
-                {exchange.support_spot && exchange.rest_api_url && (
+                {exchange.support_spot && exchange.spot_api_url && (
                   <div>
                     <p className="text-xs font-semibold text-gray-600 mb-1">
-                      Spot API:
+                      Spot REST API:
                     </p>
                     <p className="text-xs text-gray-700 font-mono truncate bg-gray-50 px-2 py-1 rounded">
-                      {exchange.rest_api_url}
+                      {exchange.spot_api_url}
                     </p>
                   </div>
                 )}
                 {exchange.support_futures && exchange.futures_api_url && (
                   <div>
                     <p className="text-xs font-semibold text-gray-600 mb-1">
-                      Futures API:
+                      Futures REST API:
                     </p>
                     <p className="text-xs text-gray-700 font-mono truncate bg-gray-50 px-2 py-1 rounded">
                       {exchange.futures_api_url}
-                    </p>
-                  </div>
-                )}
-                {exchange.websocket_url && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-600 mb-1">
-                      WebSocket:
-                    </p>
-                    <p className="text-xs text-gray-700 font-mono truncate bg-gray-50 px-2 py-1 rounded">
-                      {exchange.websocket_url}
                     </p>
                   </div>
                 )}
@@ -493,9 +495,9 @@ export default function ExchangesManagement() {
                 <input
                   type="text"
                   placeholder="https://api.exchange.com"
-                  value={formData.rest_api_url || ''}
+                  value={formData.spot_api_url || ''}
                   onChange={(e) =>
-                    setFormData({...formData, rest_api_url: e.target.value})
+                    setFormData({...formData, spot_api_url: e.target.value})
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
@@ -518,31 +520,16 @@ export default function ExchangesManagement() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  WebSocket URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="wss://stream.exchange.com"
-                  value={formData.websocket_url || ''}
-                  onChange={(e) =>
-                    setFormData({...formData, websocket_url: e.target.value})
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Testnet API URL
+                  Spot Testnet API URL
                 </label>
                 <input
                   type="text"
                   placeholder="https://testnet.exchange.com"
-                  value={formData.rest_api_testnet_url || ''}
+                  value={formData.spot_api_testnet_url || ''}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      rest_api_testnet_url: e.target.value,
+                      spot_api_testnet_url: e.target.value,
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -772,9 +759,9 @@ export default function ExchangesManagement() {
                 </label>
                 <input
                   type="text"
-                  value={formData.rest_api_url || ''}
+                  value={formData.spot_api_url || ''}
                   onChange={(e) =>
-                    setFormData({...formData, rest_api_url: e.target.value})
+                    setFormData({...formData, spot_api_url: e.target.value})
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -796,29 +783,15 @@ export default function ExchangesManagement() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  WebSocket URL
+                  Spot Testnet API URL
                 </label>
                 <input
                   type="text"
-                  value={formData.websocket_url || ''}
-                  onChange={(e) =>
-                    setFormData({...formData, websocket_url: e.target.value})
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Testnet API URL
-                </label>
-                <input
-                  type="text"
-                  value={formData.rest_api_testnet_url || ''}
+                  value={formData.spot_api_testnet_url || ''}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      rest_api_testnet_url: e.target.value,
+                      spot_api_testnet_url: e.target.value,
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

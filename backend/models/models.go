@@ -221,3 +221,19 @@ type ExchangeAPIConfig struct {
 	UpdatedAt            time.Time      `json:"updated_at"`
 	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+// TelegramConfig stores Telegram bot configuration
+type TelegramConfig struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	UserID    uint           `gorm:"not null;uniqueIndex" json:"user_id"` // One config per user
+	BotToken  string         `gorm:"not null;size:255" json:"bot_token"`  // Telegram bot token
+	ChatID    string         `gorm:"not null;size:100" json:"chat_id"`    // Telegram chat ID
+	BotName   string         `gorm:"size:100" json:"bot_name"`            // Bot name for display
+	IsEnabled bool           `gorm:"default:true" json:"is_enabled"`      // Enable/disable notifications
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User User `gorm:"foreignKey:UserID" json:"-"`
+}

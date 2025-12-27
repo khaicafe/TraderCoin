@@ -110,6 +110,7 @@ func RunMigrations(db *gorm.DB) error {
 		&models.WebhookPrefix{},
 		&models.SystemLog{},
 		&models.ExchangeAPIConfig{},
+		&models.TelegramConfig{},
 	)
 
 	if err != nil {

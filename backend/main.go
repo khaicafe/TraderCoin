@@ -7,6 +7,7 @@ import (
 	"tradercoin/backend/config"
 	"tradercoin/backend/database"
 	"tradercoin/backend/middleware"
+	"tradercoin/backend/models"
 	api "tradercoin/backend/routes"
 	"tradercoin/backend/services"
 	"tradercoin/backend/utils"
@@ -63,6 +64,29 @@ func main() {
 		Redis: redisClient,
 	}
 
+	// Initialize Telegram Service
+	telegramService := services.NewTelegramService(db)
+	// Start Telegram callback listeners for all active configs
+	go func() {
+		var configs []models.TelegramConfig
+		if err := db.Where("is_enabled = ?", true).Find(&configs).Error; err != nil {
+			log.Printf("⚠️ Failed to load Telegram configs: %v", err)
+			return
+		}
+
+		for _, config := range configs {
+			// Start listener for each active bot
+			go func(botToken string, userID uint) {
+				log.Printf("🤖 Starting Telegram listener for user %d", userID)
+				if err := telegramService.HandleUpdates(botToken); err != nil {
+					log.Printf("❌ Telegram listener error for user %d: %v", userID, err)
+				}
+			}(config.BotToken, config.UserID)
+		}
+
+		log.Printf("✅ Started Telegram listeners for %d active bots", len(configs))
+	}()
+
 	// Initialize WebSocket Hub
 	wsHub := services.NewWebSocketHub(db, cfg)
 	go wsHub.Run() // Run hub in background
@@ -71,7 +95,7 @@ func main() {
 	// Initialize Order Monitor Service (background worker)
 	orderMonitor := services.NewOrderMonitorService(db, wsHub)
 	svcs.OrderMonitor = orderMonitor
-	orderMonitor.Start() // Start background monitoring
+	// orderMonitor.Start() // Start background monitoring
 	log.Println("✅ Order Monitor Service started (checking every 5 seconds)")
 
 	// Setup Gin router

@@ -145,6 +145,20 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			bittrex.GET("/symbols", controllers.GetBittrexSymbols(services))
 		}
 
+		// ============ TELEGRAM ROUTES ============
+		// Prefix: /api/v1/telegram
+		telegramController := controllers.NewTelegramController(services.DB)
+		telegram := v1.Group("/telegram")
+		telegram.Use(middleware.AuthMiddleware())
+		{
+			telegram.GET("/config", telegramController.GetTelegramConfig)                // Get user's Telegram config
+			telegram.POST("/config", telegramController.CreateOrUpdateTelegramConfig)    // Create or update config
+			telegram.DELETE("/config", telegramController.DeleteTelegramConfig)          // Delete config
+			telegram.POST("/test-connection", telegramController.TestTelegramConnection) // Test connection
+			telegram.POST("/test-message", telegramController.SendTestMessage)           // Send test message
+			telegram.PATCH("/toggle", telegramController.ToggleTelegramNotifications)    // Enable/disable notifications
+		}
+
 		// ============ ADMIN ROUTES ============
 		// Prefix: /api/v1/admin
 		admin := v1.Group("/admin")
@@ -158,11 +172,15 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			admin.POST("/users/:id/extend", controllers.ExtendUserSubscription(services)) // Gia hạn subscription
 			admin.GET("/transactions", controllers.GetAllTransactions(services))
 			admin.GET("/statistics", controllers.GetStatistics(services))
-			admin.GET("/orders", controllers.GetAllOrdersAdmin(services))    // Get all orders from all users
-			admin.GET("/signals", controllers.ListSignals(services))         // Get all signals
-			admin.GET("/signals/:id", controllers.GetSignal(services))       // Get single signal
-			admin.DELETE("/signals/:id", controllers.DeleteSignal(services)) // Delete signal
-			admin.GET("/logs", controllers.GetAllSystemLogs(services))       // Get all system logs
+			admin.GET("/orders", controllers.GetAllOrdersAdmin(services))                           // Get all orders from all users
+			admin.GET("/signals", controllers.ListSignals(services))                                // Get all signals
+			admin.GET("/signals/:id", controllers.GetSignal(services))                              // Get single signal
+			admin.DELETE("/signals/:id", controllers.DeleteSignal(services))                        // Delete signal
+			admin.GET("/logs", controllers.GetAllSystemLogs(services))                              // Get all system logs
+			admin.GET("/telegram", telegramController.GetAllTelegramConfigs)                        // Get all Telegram configs
+			admin.POST("/telegram", telegramController.AdminCreateTelegramConfig)                   // Create Telegram config for user
+			admin.POST("/telegram/test-connection", telegramController.AdminTestTelegramConnection) // Test Telegram connection
+			admin.POST("/telegram/start-listener", telegramController.StartCallbackListener)        // Start callback listener for buttons
 
 			// Admin profile & settings - Require authentication
 			adminAuth := admin.Group("")
