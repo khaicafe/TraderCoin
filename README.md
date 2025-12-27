@@ -376,5 +376,5 @@ curl -X POST http://localhost:8080/api/v1/signals/webhook/74c7c7f4ce33 \
 curl -X POST http://localhost:8080/api/v1/admin/telegram/start-listener \
  -H "Content-Type: application/json" \
  -d '{
-"bot_token": "7980625644:AAFvvtf7gXzpwlVMPdjt2MLqt5jmS1s7nqY"
+"bot_token": "8446077844:AAFhMD3CIrw-slgbk57TXstRKZsVl84Iyoo"
 }'
