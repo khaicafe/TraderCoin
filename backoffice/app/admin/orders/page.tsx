@@ -1,44 +1,10 @@
 'use client';
 
 import {useState, useEffect} from 'react';
-
-interface Order {
-  id: number;
-  user_id: number;
-  exchange: string;
-  symbol: string;
-  order_id: string;
-  side: string;
-  type: string;
-  quantity: number;
-  price: number;
-  filled_price: number;
-  filled_quantity: number;
-  current_price: number;
-  status: string;
-  trading_mode: string;
-  leverage: number;
-  stop_loss_price: number;
-  take_profit_price: number;
-  pnl: number;
-  pnl_percent: number;
-  position_side: string;
-  liquidation_price: number;
-  margin_type: string;
-  isolated_margin: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface User {
-  id: number;
-  email: string;
-  full_name: string;
-}
+import {getOrders, Order} from '@/services/adminService';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -46,63 +12,37 @@ export default function OrdersPage() {
   const [filterMode, setFilterMode] = useState('all');
 
   useEffect(() => {
-    fetchOrders();
-    fetchUsers();
+    fetchData();
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchData = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch(
-        'http://localhost:8080/api/v1/admin/orders',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      const data = await response.json();
-      if (data.success) {
-        setOrders(data.orders || []);
+      setLoading(true);
+      const ordersData = await getOrders();
+
+      if (ordersData.success) {
+        setOrders(ordersData.orders || []);
       }
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await fetch('http://localhost:8080/api/v1/admin/users', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUsers(data.users || []);
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
-
-  const getUserInfo = (userId: number) => {
-    const user = users.find((u) => u.id === userId);
-    return user
-      ? {email: user.email, name: user.full_name}
-      : {email: 'Unknown', name: 'Unknown'};
+  const getUserInfo = (order: Order) => {
+    return {
+      email: order.user_email || 'Unknown',
+      name: order.user_full_name || 'Unknown',
+    };
   };
 
   const filteredOrders = orders.filter((order) => {
+    const userInfo = getUserInfo(order);
     const matchesSearch =
       order.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.order_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getUserInfo(order.user_id)
-        .email.toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      userInfo.email.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus =
       filterStatus === 'all' || order.status === filterStatus;
@@ -177,20 +117,20 @@ export default function OrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-6 bg-white rounded-lg shadow-md p-6 border-t-4 border-[#EE4D2D]">
+      <div className="mb-6 bg-white rounded-lg shadow-md p-6 border-t-4 border-orange-400">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input
             type="text"
             placeholder="Search by symbol, order ID, or user email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#EE4D2D] transition-colors"
+            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-orange-500 transition-colors"
           />
 
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-[#EE4D2D] transition-colors">
+            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-orange-500 transition-colors">
             <option value="all">All Status</option>
             <option value="new">New</option>
             <option value="pending">Pending</option>
@@ -204,7 +144,7 @@ export default function OrdersPage() {
           <select
             value={filterExchange}
             onChange={(e) => setFilterExchange(e.target.value)}
-            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-[#EE4D2D] transition-colors">
+            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-orange-500 transition-colors">
             <option value="all">All Exchanges</option>
             <option value="binance">Binance</option>
             <option value="bingx">BingX</option>
@@ -213,7 +153,7 @@ export default function OrdersPage() {
           <select
             value={filterMode}
             onChange={(e) => setFilterMode(e.target.value)}
-            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-[#EE4D2D] transition-colors">
+            className="px-4 py-2 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:border-orange-500 transition-colors">
             <option value="all">All Modes</option>
             <option value="spot">Spot</option>
             <option value="futures">Futures</option>
@@ -223,8 +163,8 @@ export default function OrdersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-[#EE4D2D]">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-orange-400">
           <div className="text-gray-500 text-sm mb-2 font-medium">
             Total Orders
           </div>
@@ -274,50 +214,83 @@ export default function OrdersPage() {
             }
           </div>
         </div>
+        <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-purple-500">
+          <div className="text-gray-500 text-sm mb-2 font-medium">
+            Total PnL
+          </div>
+          <div
+            className={`text-3xl font-bold ${
+              orders.reduce((sum, o) => sum + (o.pnl || 0), 0) >= 0
+                ? 'text-green-600'
+                : 'text-red-600'
+            }`}>
+            {orders.reduce((sum, o) => sum + (o.pnl || 0), 0) >= 0 ? '+' : ''}$
+            {formatNumber(
+              orders.reduce((sum, o) => sum + (o.pnl || 0), 0),
+              2,
+            )}
+          </div>
+          <div
+            className={`text-sm mt-1 ${
+              orders.reduce((sum, o) => sum + (o.pnl_percent || 0), 0) >= 0
+                ? 'text-green-500'
+                : 'text-red-500'
+            }`}>
+            {orders.reduce((sum, o) => sum + (o.pnl_percent || 0), 0) >= 0
+              ? '+'
+              : ''}
+            {formatNumber(
+              orders.reduce((sum, o) => sum + (o.pnl_percent || 0), 0) /
+                orders.filter((o) => o.pnl !== 0).length || 0,
+              2,
+            )}
+            % avg
+          </div>
+        </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden border-t-4 border-[#EE4D2D]">
+      {/* Orders Table - Scrollable */}
+      <div className="bg-white rounded-lg shadow-md border-t-4 border-orange-400">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gradient-to-r from-orange-50 to-orange-100 border-b-2 border-[#EE4D2D]">
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+          <table className="w-full table-auto">
+            <thead className="bg-gradient-to-r from-orange-50 to-orange-100">
+              <tr className="border-b-2 border-orange-400">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   User
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Exchange
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Symbol
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Side
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-right text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Quantity
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-right text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Price
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-right text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Filled
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-right text-xs font-medium text-orange-600 uppercase tracking-wider">
                   PnL
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-center text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-[#EE4D2D] uppercase tracking-wider">
+                <th className="px-4 py-4 text-left text-xs font-medium text-orange-600 uppercase tracking-wider">
                   Created
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200 bg-white">
               {filteredOrders.length === 0 ? (
                 <tr>
                   <td
@@ -328,12 +301,12 @@ export default function OrdersPage() {
                 </tr>
               ) : (
                 filteredOrders.map((order) => {
-                  const userInfo = getUserInfo(order.user_id);
+                  const userInfo = getUserInfo(order);
                   return (
                     <tr
                       key={order.id}
                       className="hover:bg-orange-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4">
                         <div className="text-sm">
                           <div className="text-gray-900 font-medium">
                             {userInfo.name}
@@ -343,8 +316,8 @@ export default function OrdersPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-gray-900 font-medium uppercase">
                             {order.exchange}
                           </span>
@@ -360,10 +333,10 @@ export default function OrdersPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-900 font-semibold">
+                      <td className="px-4 py-4 text-gray-900 font-semibold">
                         {order.symbol}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4">
                         <span
                           className={`font-semibold uppercase ${getSideColor(
                             order.side,
@@ -371,16 +344,14 @@ export default function OrdersPage() {
                           {order.side}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                        {order.type}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700">
+                      <td className="px-4 py-4 text-gray-700">{order.type}</td>
+                      <td className="px-4 py-4 text-right text-gray-700">
                         {formatNumber(order.quantity, 6)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-gray-700">
+                      <td className="px-4 py-4 text-right text-gray-700">
                         ${formatNumber(order.price, 4)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-4 py-4 text-right">
                         <div className="text-gray-700">
                           {formatNumber(order.filled_quantity || 0, 6)}
                           <span className="text-xs text-gray-500 ml-1">
@@ -398,7 +369,7 @@ export default function OrdersPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-4 py-4 text-right">
                         {order.pnl !== 0 && (
                           <div>
                             <div
@@ -422,7 +393,7 @@ export default function OrdersPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <td className="px-4 py-4 text-center">
                         <span
                           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
                             order.status,
@@ -430,7 +401,7 @@ export default function OrdersPage() {
                           {order.status.replace('_', ' ').toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-4 text-sm text-gray-600">
                         {formatDate(order.created_at)}
                       </td>
                     </tr>
@@ -440,11 +411,11 @@ export default function OrdersPage() {
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Pagination info */}
-      <div className="mt-4 text-sm text-gray-600 text-center">
-        Showing {filteredOrders.length} of {orders.length} orders
+        {/* Pagination info - Fixed at bottom */}
+        <div className="flex-shrink-0 px-6 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-600 text-center">
+          Showing {filteredOrders.length} of {orders.length} orders
+        </div>
       </div>
     </div>
   );

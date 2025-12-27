@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 	"tradercoin/backend/models"
 	"tradercoin/backend/services"
@@ -214,6 +215,77 @@ func GetAllTransactions(services *services.Services) gin.HandlerFunc {
 	}
 }
 
+// GetAllSystemLogs - Lấy danh sách tất cả system logs (Admin only)
+func GetAllSystemLogs(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Query parameters
+		userID := c.Query("user_id")
+		level := c.Query("level")
+		symbol := c.Query("symbol")
+		action := c.Query("action")
+		limitStr := c.DefaultQuery("limit", "100")
+
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 || limit > 500 {
+			limit = 100
+		}
+
+		// Build query with join to get user info
+		query := services.DB.Model(&models.SystemLog{}).
+			Select("system_logs.*, users.email as user_email, users.full_name as user_full_name").
+			Joins("LEFT JOIN users ON system_logs.user_id = users.id").
+			Order("system_logs.created_at desc")
+
+		// Apply filters
+		if userID != "" {
+			query = query.Where("system_logs.user_id = ?", userID)
+		}
+		if level != "" {
+			query = query.Where("system_logs.level = ?", level)
+		}
+		if symbol != "" {
+			query = query.Where("system_logs.symbol = ?", symbol)
+		}
+		if action != "" {
+			query = query.Where("system_logs.action LIKE ?", "%"+action+"%")
+		}
+
+		var logs []struct {
+			models.SystemLog
+			UserEmail    string
+			UserFullName string
+		}
+		if err := query.Limit(limit).Find(&logs).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		result := make([]map[string]interface{}, 0, len(logs))
+		for _, log := range logs {
+			result = append(result, map[string]interface{}{
+				"id":             log.ID,
+				"user_id":        log.UserID,
+				"user_email":     log.UserEmail,
+				"user_full_name": log.UserFullName,
+				"level":          log.Level,
+				"action":         log.Action,
+				"symbol":         log.Symbol,
+				"exchange":       log.Exchange,
+				"order_id":       log.OrderID,
+				"price":          log.Price,
+				"amount":         log.Amount,
+				"message":        log.Message,
+				"details":        log.Details,
+				"ip_address":     log.IPAddress,
+				"user_agent":     log.UserAgent,
+				"created_at":     log.CreatedAt,
+			})
+		}
+
+		c.JSON(http.StatusOK, result)
+	}
+}
+
 // GetStatistics - Lấy thống kê tổng quan (Admin only)
 func GetStatistics(services *services.Services) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -409,6 +481,148 @@ func ActivateUser(services *services.Services) gin.HandlerFunc {
 				"email":  user.Email,
 				"status": user.Status,
 			},
+		})
+	}
+}
+
+// GetAdminProfile - Lấy thông tin admin hiện tại
+func GetAdminProfile(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get admin ID from context (set by middleware)
+		adminID, exists := c.Get("admin_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin not authenticated"})
+			return
+		}
+
+		var admin models.Admin
+		if err := services.DB.First(&admin, adminID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Admin not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"id":         admin.ID,
+			"email":      admin.Email,
+			"full_name":  admin.FullName,
+			"role":       admin.Role,
+			"created_at": admin.CreatedAt,
+		})
+	}
+}
+
+// UpdateAdminProfile - Cập nhật thông tin admin
+func UpdateAdminProfile(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get admin ID from context
+		adminID, exists := c.Get("admin_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin not authenticated"})
+			return
+		}
+
+		var input struct {
+			Email    string `json:"email" binding:"required,email"`
+			FullName string `json:"full_name" binding:"required"`
+		}
+
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var admin models.Admin
+		if err := services.DB.First(&admin, adminID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Admin not found"})
+			return
+		}
+
+		// Check if email is already taken by another admin
+		if input.Email != admin.Email {
+			var existingAdmin models.Admin
+			if err := services.DB.Where("email = ? AND id != ?", input.Email, adminID).First(&existingAdmin).Error; err == nil {
+				c.JSON(http.StatusConflict, gin.H{"error": "Email already exists"})
+				return
+			}
+		}
+
+		// Update admin info
+		admin.Email = input.Email
+		admin.FullName = input.FullName
+
+		if err := services.DB.Save(&admin).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+			return
+		}
+
+		utils.LogInfo("Admin updated profile: " + admin.Email)
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Profile updated successfully",
+			"admin": gin.H{
+				"id":        admin.ID,
+				"email":     admin.Email,
+				"full_name": admin.FullName,
+				"role":      admin.Role,
+			},
+		})
+	}
+}
+
+// ChangeAdminPassword - Thay đổi mật khẩu admin
+func ChangeAdminPassword(services *services.Services) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get admin ID from context
+		adminID, exists := c.Get("admin_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin not authenticated"})
+			return
+		}
+
+		var input struct {
+			CurrentPassword string `json:"current_password" binding:"required"`
+			NewPassword     string `json:"new_password" binding:"required,min=6"`
+		}
+
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var admin models.Admin
+		if err := services.DB.First(&admin, adminID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Admin not found"})
+			return
+		}
+
+		// Verify current password
+		if err := bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte(input.CurrentPassword)); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Current password is incorrect"})
+			return
+		}
+
+		// Hash new password
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+			return
+		}
+
+		// Update password
+		admin.PasswordHash = string(hashedPassword)
+		if err := services.DB.Save(&admin).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+			return
+		}
+
+		utils.LogInfo("Admin changed password: " + admin.Email)
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Password changed successfully",
 		})
 	}
 }

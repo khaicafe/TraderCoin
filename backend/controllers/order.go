@@ -426,10 +426,36 @@ func GetAllOrdersAdmin(services *services.Services) gin.HandlerFunc {
 			return
 		}
 
+		// Build response with user info
+		type OrderWithUser struct {
+			models.Order
+			UserEmail    string `json:"user_email"`
+			UserFullName string `json:"user_full_name"`
+		}
+
+		result := make([]OrderWithUser, 0, len(orders))
+		for _, order := range orders {
+			var user models.User
+			userEmail := "Unknown"
+			userFullName := "Unknown"
+
+			// Query user info
+			if err := services.DB.Where("id = ?", order.UserID).First(&user).Error; err == nil {
+				userEmail = user.Email
+				userFullName = user.FullName
+			}
+
+			result = append(result, OrderWithUser{
+				Order:        order,
+				UserEmail:    userEmail,
+				UserFullName: userFullName,
+			})
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"orders":  orders,
-			"count":   len(orders),
+			"orders":  result,
+			"count":   len(result),
 		})
 	}
 }

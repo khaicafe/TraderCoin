@@ -158,7 +158,20 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 			admin.POST("/users/:id/extend", controllers.ExtendUserSubscription(services)) // Gia hạn subscription
 			admin.GET("/transactions", controllers.GetAllTransactions(services))
 			admin.GET("/statistics", controllers.GetStatistics(services))
-			admin.GET("/orders", controllers.GetAllOrdersAdmin(services)) // Get all orders from all users
+			admin.GET("/orders", controllers.GetAllOrdersAdmin(services))    // Get all orders from all users
+			admin.GET("/signals", controllers.ListSignals(services))         // Get all signals
+			admin.GET("/signals/:id", controllers.GetSignal(services))       // Get single signal
+			admin.DELETE("/signals/:id", controllers.DeleteSignal(services)) // Delete signal
+			admin.GET("/logs", controllers.GetAllSystemLogs(services))       // Get all system logs
+
+			// Admin profile & settings - Require authentication
+			adminAuth := admin.Group("")
+			adminAuth.Use(middleware.AdminAuthMiddleware())
+			{
+				adminAuth.GET("/profile", controllers.GetAdminProfile(services))      // Get admin profile
+				adminAuth.PUT("/profile", controllers.UpdateAdminProfile(services))   // Update admin profile
+				adminAuth.PUT("/password", controllers.ChangeAdminPassword(services)) // Change admin password
+			}
 		}
 
 		// ============ TRADING SIGNALS ROUTES ============

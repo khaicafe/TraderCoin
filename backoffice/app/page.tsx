@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import {useRouter} from 'next/navigation';
+import {adminLogin} from '@/services/adminService';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -18,22 +19,7 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/login`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        },
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
+      const data = await adminLogin(formData.email, formData.password);
 
       // Backend currently returns placeholder response
       // Store token (or mock token if not provided)
@@ -51,7 +37,7 @@ export default function AdminLoginPage() {
 
       router.push('/admin/dashboard');
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      setError(err.response?.data?.error || err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
