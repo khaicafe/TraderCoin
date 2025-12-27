@@ -15,7 +15,7 @@ import (
 )
 
 // TradingViewWebhook handles incoming signals from TradingView
-func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHub) gin.HandlerFunc {
+func TradingViewWebhook(svcs *services.Services, wsHub *services.WebSocketHub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Optional URL path prefix to identify user webhook
 		prefix := c.Param("prefix")
@@ -52,7 +52,7 @@ func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHu
 			WebhookPrefix: prefix,
 		}
 
-		if err := services.DB.Create(&signal).Error; err != nil {
+		if err := svcs.DB.Create(&signal).Error; err != nil {
 			utils.LogError(fmt.Sprintf("❌ Failed to save signal: %v", err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save signal"})
 			return
@@ -81,6 +81,27 @@ func TradingViewWebhook(services *services.Services, wsHub *services.WebSocketHu
 			utils.LogInfo(fmt.Sprintf("📡 AFTER BroadcastToAll - Broadcasted signal_new event (ID: %d) to all WebSocket clients", signal.ID))
 		} else {
 			utils.LogError("❌ wsHub is NIL - cannot broadcast signal!")
+		}
+
+		// Broadcast signal to all users via Telegram
+		telegramService := services.NewTelegramService(svcs.DB)
+
+		// Get all active Telegram configs with bot tokens
+		var telegramConfigs []models.TelegramConfig
+		if err := svcs.DB.Where("is_enabled = ? AND bot_token != ''", true).Find(&telegramConfigs).Error; err != nil {
+			log.Printf("⚠️ Failed to query Telegram configs: %v", err)
+		} else if len(telegramConfigs) > 0 {
+			// Use the first active bot token (or implement logic to choose specific bot)
+			botToken := telegramConfigs[0].BotToken
+			go func() {
+				if err := telegramService.BroadcastTestConnectionToAllUsers(botToken); err != nil {
+					log.Printf("❌ Failed to broadcast Telegram notification: %v", err)
+				} else {
+					log.Printf("✅ Telegram notification sent to all users with bot: %s", telegramConfigs[0].BotName)
+				}
+			}()
+		} else {
+			log.Printf("⚠️ No active Telegram bot configs found, skipping Telegram broadcast")
 		}
 
 		c.JSON(http.StatusOK, gin.H{

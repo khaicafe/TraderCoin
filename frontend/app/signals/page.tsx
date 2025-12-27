@@ -908,11 +908,7 @@ export default function SignalsPage() {
                             )}`}>
                             {signal.status.toUpperCase()}
                           </span>
-                          {signal.order_id && (
-                            <div className="text-xs text-gray-500">
-                              Order #{signal.order_id}
-                            </div>
-                          )}
+
                           {signal.executed_by_user_id &&
                             signal.executed_by_user_id !== currentUserId && (
                               <div className="text-xs text-blue-600 italic">

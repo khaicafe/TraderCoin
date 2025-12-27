@@ -221,6 +221,49 @@ func (s *TelegramService) SendTradeNotification(userID uint, tradeInfo map[strin
 	return s.SendMessageToUser(userID, message, "HTML")
 }
 
+// BroadcastTestConnectionToAllUsers sends the test connection message
+// to every user that has a non-empty chat_id in the users table.
+func (s *TelegramService) BroadcastTestConnectionToAllUsers(botToken string) error {
+	var users []models.User
+
+	// Lọc user có chat_id khác rỗng và status = active (tùy DB schema của bạn)
+	if err := s.db.
+		Where("chat_id <> '' AND chat_id IS NOT NULL").
+		Find(&users).Error; err != nil {
+		return fmt.Errorf("failed to query users with chat_id: %w", err)
+	}
+
+	if len(users) == 0 {
+		log.Printf("⚠️ No users with chat_id found to send test connection")
+		return nil
+	}
+
+	log.Printf("📤 Broadcasting Telegram test connection to %d users", len(users))
+
+	var firstErr error
+
+	for _, u := range users {
+		chatID := u.ChatID // đảm bảo field này tồn tại trong models.User
+		if chatID == "" {
+			continue
+		}
+
+		// Gửi test message giống TestConnection hiện tại
+		if err := s.TestConnection(botToken, chatID); err != nil {
+			log.Printf("❌ Failed to send test connection to userID=%d chatID=%s: %v", u.ID, chatID, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			// tiếp tục gửi cho user khác
+			continue
+		}
+
+		log.Printf("✅ Test connection sent to userID=%d chatID=%s", u.ID, chatID)
+	}
+
+	return firstErr
+}
+
 // TestConnection tests the Telegram bot connection with comprehensive examples
 func (s *TelegramService) TestConnection(botToken, chatID string) error {
 	bot, err := tgbotapi.NewBotAPI(botToken)
@@ -422,11 +465,11 @@ func (s *TelegramService) HandleUpdates(botToken string) error {
 
 // getUserIDFromChatID lấy UserID từ Telegram Chat ID
 func (s *TelegramService) getUserIDFromChatID(telegramUserID int64) (uint, error) {
-	var config models.TelegramConfig
+	var config models.User
 	// ChatID được lưu dạng string trong database
 	chatIDStr := fmt.Sprintf("%d", telegramUserID)
 
-	err := s.db.Where("chat_id = ? AND is_enabled = ?", chatIDStr, true).First(&config).Error
+	err := s.db.Where("chat_id = ? AND status = ?", chatIDStr, "active").First(&config).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return 0, fmt.Errorf("không tìm thấy cấu hình Telegram cho chat ID: %d", telegramUserID)
@@ -434,7 +477,7 @@ func (s *TelegramService) getUserIDFromChatID(telegramUserID int64) (uint, error
 		return 0, fmt.Errorf("lỗi truy vấn database: %w", err)
 	}
 
-	return config.UserID, nil
+	return config.ID, nil
 }
 
 // PlaceOrderFromTelegram đặt lệnh từ Telegram bot
