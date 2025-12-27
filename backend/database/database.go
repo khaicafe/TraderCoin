@@ -108,6 +108,7 @@ func RunMigrations(db *gorm.DB) error {
 		&models.Admin{},
 		&models.TradingSignal{},
 		&models.WebhookPrefix{},
+		&models.SystemLog{},
 	)
 
 	if err != nil {

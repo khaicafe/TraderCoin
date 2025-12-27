@@ -174,5 +174,15 @@ func SetupRoutes(router *gin.Engine, services *services.Services, wsHub *service
 				signalsAuth.POST("/webhook/prefix", controllers.CreateWebhookPrefix(services)) // Create new prefix
 			}
 		}
+
+		// ============ SYSTEM LOGS ROUTES ============
+		// Prefix: /api/v1/logs
+		logs := v1.Group("/logs")
+		logs.Use(middleware.AuthMiddleware())
+		{
+			logs.GET("", controllers.GetSystemLogs(services))            // Get system logs
+			logs.GET("/stats", controllers.GetSystemLogStats(services))  // Get log statistics
+			logs.DELETE("/clear", controllers.ClearSystemLogs(services)) // Clear old logs
+		}
 	}
 }

@@ -276,10 +276,10 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		// Use signal price if available, otherwise use market price
 		orderType := "market"
 		var price float64
-		if signal.Price > 0 {
-			orderType = "limit"
-			price = signal.Price
-		}
+		// if signal.Price > 0 {
+		// 	orderType = "limit"
+		// 	price = signal.Price
+		// }
 
 		// Use config amount
 		amount := config.Amount
@@ -356,7 +356,10 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 				orderResult.OrderID, orderResult.Symbol, orderResult.Side, orderResult.Quantity, orderResult.FilledPrice))
 		} else {
 			// Place order on exchange (LIVE MODE)
-			tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange)
+			utils.LogInfo(fmt.Sprintf("🔍 DEBUG PlaceOrder params: side=%s, orderType=%s, symbol=%s, amount=%.8f, price=%.8f",
+				side, orderType, signal.Symbol, amount, price))
+
+			tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange, services.DB, userID.(uint))
 			orderResult = tradingService.PlaceOrder(&config, side, orderType, signal.Symbol, amount, price)
 		}
 
@@ -403,24 +406,46 @@ func ExecuteSignal(services *services.Services) gin.HandlerFunc {
 		}
 
 		// Create order record
+		// order := models.Order{
+		// 	UserID:          userID.(uint),
+		// 	BotConfigID:     config.ID,
+		// 	Exchange:        config.Exchange,
+		// 	Symbol:          orderResult.Symbol,
+		// 	OrderID:         orderResult.OrderID,
+		// 	Side:            orderResult.Side,
+		// 	Type:            orderResult.Type,
+		// 	Quantity:        orderResult.Quantity,
+		// 	Price:           orderResult.Price,
+		// 	FilledPrice:     orderResult.FilledPrice,
+		// 	Status:          orderResult.Status,
+		// 	TradingMode:     config.TradingMode,
+		// 	Leverage:        config.Leverage,
+		// 	StopLossPrice:   stopLoss,
+		// 	TakeProfitPrice: takeProfit,
+		// 	PnL:             0,
+		// 	PnLPercent:      0,
+		// }
+
 		order := models.Order{
-			UserID:          userID.(uint),
-			BotConfigID:     config.ID,
-			Exchange:        config.Exchange,
-			Symbol:          orderResult.Symbol,
-			OrderID:         orderResult.OrderID,
-			Side:            orderResult.Side,
-			Type:            orderResult.Type,
-			Quantity:        orderResult.Quantity,
-			Price:           orderResult.Price,
-			FilledPrice:     orderResult.FilledPrice,
-			Status:          orderResult.Status,
-			TradingMode:     config.TradingMode,
-			Leverage:        config.Leverage,
-			StopLossPrice:   stopLoss,
-			TakeProfitPrice: takeProfit,
-			PnL:             0,
-			PnLPercent:      0,
+			UserID:           userID.(uint),
+			BotConfigID:      config.ID,
+			Exchange:         config.Exchange,
+			Symbol:           orderResult.Symbol,
+			OrderID:          orderResult.OrderID, // Exchange order ID
+			Side:             orderResult.Side,
+			Type:             orderResult.Type,
+			Quantity:         orderResult.Quantity,
+			Price:            orderResult.Price,
+			FilledPrice:      orderResult.FilledPrice,
+			Status:           orderResult.Status,
+			TradingMode:      config.TradingMode,
+			Leverage:         config.Leverage,
+			StopLossPrice:    stopLoss,
+			TakeProfitPrice:  takeProfit,
+			AlgoIDStopLoss:   orderResult.AlgoIDStopLoss,   // Use from service
+			AlgoIDTakeProfit: orderResult.AlgoIDTakeProfit, // Use from service
+			PnL:              0,
+			PnLPercent:       0,
 		}
 
 		if err := services.DB.Create(&order).Error; err != nil {

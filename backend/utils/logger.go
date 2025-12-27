@@ -24,11 +24,13 @@ const (
 
 // Log levels
 const (
-	LogLevelDebug = "DEBUG"
-	LogLevelInfo  = "INFO"
-	LogLevelWarn  = "WARN"
-	LogLevelError = "ERROR"
-	LogLevelFatal = "FATAL"
+	LogLevelDebug   = "DEBUG"
+	LogLevelInfo    = "INFO"
+	LogLevelWarn    = "WARN"
+	LogLevelError   = "ERROR"
+	LogLevelFatal   = "FATAL"
+	LogLevelSuccess = "SUCCESS"
+	LogLevelWarning = "WARNING"
 )
 
 // Logger struct

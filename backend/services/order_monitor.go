@@ -136,7 +136,7 @@ func (oms *OrderMonitorService) checkPendingOrders() {
 		}
 
 		// Check order status from exchange
-		tradingService := NewTradingService(apiKey, apiSecret, order.Exchange)
+		tradingService := NewTradingService(apiKey, apiSecret, order.Exchange, oms.DB, order.UserID)
 		statusResult := tradingService.CheckOrderStatus(&config, order.OrderID, order.Symbol, order.AlgoIDStopLoss)
 
 		if !statusResult.Success {

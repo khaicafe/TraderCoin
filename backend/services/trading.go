@@ -17,6 +17,9 @@ import (
 	"time"
 	"tradercoin/backend/config"
 	"tradercoin/backend/models"
+	"tradercoin/backend/utils"
+
+	"gorm.io/gorm"
 )
 
 // TradingService handles order placement on exchanges
@@ -24,6 +27,8 @@ type TradingService struct {
 	APIKey    string
 	APISecret string
 	Exchange  string
+	DB        *gorm.DB
+	UserID    uint
 }
 
 const (
@@ -51,11 +56,13 @@ type OrderResult struct {
 }
 
 // NewTradingService creates a new trading service instance
-func NewTradingService(apiKey, apiSecret, exchange string) *TradingService {
+func NewTradingService(apiKey, apiSecret, exchange string, db *gorm.DB, userID uint) *TradingService {
 	return &TradingService{
 		APIKey:    apiKey,
 		APISecret: apiSecret,
 		Exchange:  exchange,
+		DB:        db,
+		UserID:    userID,
 	}
 }
 
@@ -230,6 +237,16 @@ func (ts *TradingService) PlaceOrder(config *models.TradingConfig, side, orderTy
 
 // placeBinanceOrder places an order on Binance
 func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, orderType, symbol string, amount, price float64) OrderResult {
+	// Log order initiation
+	if ts.DB != nil && ts.UserID > 0 {
+		utils.CreateSystemLog(ts.DB, ts.UserID, utils.LogLevelInfo, "ORDER_INITIATED",
+			fmt.Sprintf("Initiating %s %s order for %s (%.8f @ %.8f)", strings.ToUpper(side), strings.ToUpper(orderType), symbol, amount, price),
+			map[string]interface{}{
+				"symbol":   symbol,
+				"exchange": strings.ToUpper(ts.Exchange),
+			})
+	}
+
 	// For now, default to production (not testnet)
 	// TODO: Add testnet flag to TradingConfig or ExchangeKey model
 	isTestnet := false
@@ -382,6 +399,22 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 
 		fmt.Printf("❌ MAIN ORDER ERROR: %s\n\n", errorMsg)
 
+		// Log error to database
+		if ts.DB != nil && ts.UserID > 0 {
+			detailsMap := map[string]interface{}{
+				"status_code": resp.StatusCode,
+				"error_code":  errorResp["code"],
+				"error_msg":   errorResp["msg"],
+			}
+			utils.CreateSystemLog(ts.DB, ts.UserID, utils.LogLevelError, "ORDER_FAILED",
+				fmt.Sprintf("Failed to place %s order for %s: %s", strings.ToUpper(side), symbol, errorMsg),
+				map[string]interface{}{
+					"symbol":   symbol,
+					"exchange": strings.ToUpper(ts.Exchange),
+					"details":  detailsMap,
+				})
+		}
+
 		return OrderResult{
 			Success: false,
 			Error:   errorMsg,
@@ -461,6 +494,20 @@ func (ts *TradingService) placeBinanceOrder(config *models.TradingConfig, side, 
 		fmt.Printf("   Side: %s\n\n", binanceSide)
 
 		ts.PlaceTrailingStopOrder(config, symbol, quantity, binanceSide, filledPrice, orderPrice)
+	}
+
+	// Log success to database
+	if ts.DB != nil && ts.UserID > 0 {
+		utils.CreateSystemLog(ts.DB, ts.UserID, utils.LogLevelSuccess, "ORDER_EXECUTED",
+			fmt.Sprintf("Successfully placed %s %s order for %s at $%.8f (Qty: %.8f)",
+				strings.ToUpper(binanceResp.Side), strings.ToUpper(binanceResp.Type), binanceResp.Symbol, filledPrice, quantity),
+			map[string]interface{}{
+				"symbol":   binanceResp.Symbol,
+				"exchange": strings.ToUpper(ts.Exchange),
+				"order_id": binanceResp.OrderID,
+				"price":    filledPrice,
+				"amount":   quantity,
+			})
 	}
 
 	return OrderResult{

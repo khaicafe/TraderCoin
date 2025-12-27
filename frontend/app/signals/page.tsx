@@ -9,7 +9,11 @@ import {
   deleteSignal,
   TradingSignal,
 } from '@/services/signalService';
-import {listBotConfigs, BotConfig} from '@/services/botConfigService';
+import {
+  listBotConfigs,
+  BotConfig,
+  updateBotConfig,
+} from '@/services/botConfigService';
 import {getAccountInfo, AccountInfo} from '@/services/tradingService';
 import websocketService from '@/services/websocketService';
 import {getWebhookPrefix, createWebhookPrefix} from '@/services/signalService';
@@ -30,7 +34,7 @@ export default function SignalsPage() {
   const [success, setSuccess] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterSymbol, setFilterSymbol] = useState<string>('');
-  const [filterHours, setFilterHours] = useState<number>(0.5);
+  const [filterHours, setFilterHours] = useState<number>(6);
   const [wsStatus, setWsStatus] = useState<string>('DISCONNECTED');
   const [webhookPrefix, setWebhookPrefix] = useState<string>('');
   const [webhookURL, setWebhookURL] = useState<string>('');
@@ -38,6 +42,12 @@ export default function SignalsPage() {
   const [customPrefix, setCustomPrefix] = useState<string>('');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [testMode, setTestMode] = useState<boolean>(false); // 🧪 Test mode toggle
+
+  // Amount editing state
+  const [editingAmount, setEditingAmount] = useState<{[key: number]: boolean}>(
+    {},
+  );
+  const [tempAmounts, setTempAmounts] = useState<{[key: number]: number}>({});
 
   // Use ref to store latest fetchData function for WebSocket handler
   const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
@@ -714,8 +724,11 @@ export default function SignalsPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Action
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Price
+                </th> */}
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Amount
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   SL / TP
@@ -735,7 +748,7 @@ export default function SignalsPage() {
               {signals.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={10}
                     className="px-6 py-12 text-center text-gray-500">
                     <div className="text-4xl mb-2">📭</div>
                     <p>Chưa có signal nào</p>
@@ -745,118 +758,196 @@ export default function SignalsPage() {
                   </td>
                 </tr>
               ) : (
-                signals.map((signal) => (
-                  <tr key={signal.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(signal.received_at).toLocaleString('vi-VN')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-semibold text-gray-900">
-                        {signal.symbol}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {signal.webhook_prefix || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${getActionBadge(
-                          signal.action,
-                        )}`}>
-                        {signal.action.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {signal.price > 0 ? `$${signal.price.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="space-y-1">
-                        {(() => {
-                          const selectedConfig = botConfigs.find(
-                            (c) => c.id === selectedBotConfig,
-                          );
-                          if (selectedConfig) {
-                            return (
-                              <>
-                                {selectedConfig.stop_loss_percent > 0 && (
-                                  <div className="text-red-600 font-semibold">
-                                    SL: {selectedConfig.stop_loss_percent}%
-                                  </div>
-                                )}
-                                {selectedConfig.take_profit_percent > 0 && (
-                                  <div className="text-green-600 font-semibold">
-                                    TP: {selectedConfig.take_profit_percent}%
-                                  </div>
-                                )}
-                                {selectedConfig.stop_loss_percent === 0 &&
-                                  selectedConfig.take_profit_percent === 0 && (
-                                    <span className="text-gray-400">-</span>
-                                  )}
-                              </>
-                            );
-                          }
-                          return <span className="text-gray-400">-</span>;
-                        })()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {signal.strategy || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
-                          signal.status,
-                        )}`}>
-                        {signal.status.toUpperCase()}
-                      </span>
-                      {signal.order_id && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Order #{signal.order_id}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex items-center gap-2">
-                        {signal.status === 'pending' && (
-                          <>
+                signals.map((signal) => {
+                  const selectedConfig = botConfigs.find(
+                    (c) => c.id === selectedBotConfig,
+                  );
+                  const displayAmount =
+                    tempAmounts[signal.id] !== undefined
+                      ? tempAmounts[signal.id]
+                      : selectedConfig?.amount || 0;
+
+                  return (
+                    <tr key={signal.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(signal.received_at).toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="font-semibold text-gray-900">
+                          {signal.symbol}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {signal.webhook_prefix || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getActionBadge(
+                            signal.action,
+                          )}`}>
+                          {signal.action.toUpperCase()}
+                        </span>
+                      </td>
+                      {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {signal.price > 0 ? `$${signal.price.toFixed(2)}` : '-'}
+                      </td> */}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {editingAmount[signal.id] ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={displayAmount}
+                              onChange={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setTempAmounts((prev) => ({
+                                  ...prev,
+                                  [signal.id]: value,
+                                }));
+                              }}
+                              className="w-24 px-2 py-1 border border-purple-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                              autoFocus
+                            />
                             <button
-                              onClick={() => handleExecuteSignal(signal.id)}
-                              disabled={
-                                !selectedBotConfig ||
-                                executing === signal.id ||
-                                (signal.executed_by_user_id === currentUserId &&
-                                  currentUserId !== null)
-                              }
-                              className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold"
-                              title={
-                                signal.executed_by_user_id === currentUserId &&
-                                currentUserId !== null
-                                  ? 'Bạn đã đặt lệnh cho signal này'
-                                  : undefined
-                              }>
-                              {executing === signal.id
-                                ? '⏳'
-                                : signal.executed_by_user_id ===
-                                    currentUserId && currentUserId !== null
-                                ? '✅ Đã đặt'
-                                : '✅ Đặt lệnh'}
+                              onClick={async () => {
+                                if (selectedBotConfig) {
+                                  try {
+                                    await updateBotConfig(selectedBotConfig, {
+                                      amount: tempAmounts[signal.id],
+                                    });
+                                    setEditingAmount((prev) => ({
+                                      ...prev,
+                                      [signal.id]: false,
+                                    }));
+                                    setSuccess('Đã cập nhật amount');
+                                    fetchData();
+                                  } catch (err: any) {
+                                    setError('Không thể cập nhật amount');
+                                  }
+                                }
+                              }}
+                              className="text-green-600 hover:text-green-800">
+                              ✓
                             </button>
-                            {/* <button
-                              onClick={() => handleIgnoreSignal(signal.id)}
-                              className="px-3 py-1 bg-gray-400 hover:bg-gray-500 text-white rounded text-xs">
-                              🚫
-                            </button> */}
-                          </>
+                            <button
+                              onClick={() => {
+                                setEditingAmount((prev) => ({
+                                  ...prev,
+                                  [signal.id]: false,
+                                }));
+                                setTempAmounts((prev) => {
+                                  const newAmounts = {...prev};
+                                  delete newAmounts[signal.id];
+                                  return newAmounts;
+                                });
+                              }}
+                              className="text-red-600 hover:text-red-800">
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            className="flex items-center gap-2 cursor-pointer group"
+                            onClick={() => {
+                              setEditingAmount((prev) => ({
+                                ...prev,
+                                [signal.id]: true,
+                              }));
+                              setTempAmounts((prev) => ({
+                                ...prev,
+                                [signal.id]: selectedConfig?.amount || 0,
+                              }));
+                            }}>
+                            <span className="font-semibold text-gray-900">
+                              {displayAmount > 0
+                                ? displayAmount.toFixed(4)
+                                : '-'}
+                            </span>
+                            <span className="text-gray-400 group-hover:text-purple-600 text-xs">
+                              ✎
+                            </span>
+                          </div>
                         )}
-                        {/* <button
-                          onClick={() => handleDeleteSignal(signal.id)}
-                          className="px-3 py-1 bg-red-400 hover:bg-red-500 text-white rounded text-xs">
-                          🗑️
-                        </button> */}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="space-y-1">
+                          {(() => {
+                            if (selectedConfig) {
+                              return (
+                                <>
+                                  {selectedConfig.stop_loss_percent > 0 && (
+                                    <div className="text-red-600 font-semibold">
+                                      SL: {selectedConfig.stop_loss_percent}%
+                                    </div>
+                                  )}
+                                  {selectedConfig.take_profit_percent > 0 && (
+                                    <div className="text-green-600 font-semibold">
+                                      TP: {selectedConfig.take_profit_percent}%
+                                    </div>
+                                  )}
+                                  {selectedConfig.stop_loss_percent === 0 &&
+                                    selectedConfig.take_profit_percent ===
+                                      0 && (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                </>
+                              );
+                            }
+                            return <span className="text-gray-400">-</span>;
+                          })()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {signal.strategy || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
+                            signal.status,
+                          )}`}>
+                          {signal.status.toUpperCase()}
+                        </span>
+                        {signal.order_id && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Order #{signal.order_id}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex items-center gap-2">
+                          {signal.status === 'pending' && (
+                            // {signal.status === 'failed' && (
+                            <>
+                              <button
+                                onClick={() => handleExecuteSignal(signal.id)}
+                                // disabled={
+                                //   !selectedBotConfig ||
+                                //   executing === signal.id ||
+                                //   (signal.executed_by_user_id ===
+                                //     currentUserId &&
+                                //     currentUserId !== null)
+                                // }
+                                className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded text-xs font-semibold"
+                                title={
+                                  signal.executed_by_user_id ===
+                                    currentUserId && currentUserId !== null
+                                    ? 'Bạn đã đặt lệnh cho signal này'
+                                    : undefined
+                                }>
+                                {executing === signal.id
+                                  ? '⏳'
+                                  : signal.executed_by_user_id ===
+                                      currentUserId && currentUserId !== null
+                                  ? '✅ Đã đặt'
+                                  : '✅ Đặt lệnh'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

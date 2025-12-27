@@ -128,7 +128,7 @@ func PlaceOrderDirect(services *services.Services) gin.HandlerFunc {
 		}
 
 		// Place order on exchange
-		tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange)
+		tradingService := tradingservice.NewTradingService(apiKey, apiSecret, config.Exchange, services.DB, userID.(uint))
 		orderResult := tradingService.PlaceOrder(&config, request.Side, orderType, symbol, amount, price)
 
 		if !orderResult.Success {

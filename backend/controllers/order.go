@@ -373,7 +373,7 @@ func CloseOrdersBySymbol(svc *services.Services) gin.HandlerFunc {
 		log.Printf("🔐 Decrypted API Secret length: %d", len(apiSecret))
 
 		// Create trading service with decrypted credentials
-		tradingService := services.NewTradingService(apiKey, apiSecret, config.Exchange)
+		tradingService := services.NewTradingService(apiKey, apiSecret, config.Exchange, svc.DB, userID.(uint))
 
 		// Log details before calling cancellation
 		log.Printf("🔴 CloseOrdersBySymbol - OrderID: %d, Symbol: %s, Exchange: %s, BotConfigID: %d",

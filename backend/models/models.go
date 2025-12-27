@@ -171,3 +171,25 @@ type WebhookPrefix struct {
 	// Relationships
 	User User `gorm:"foreignKey:UserID" json:"-"`
 }
+
+// SystemLog stores system activity logs for user actions
+type SystemLog struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"not null;index" json:"user_id"`
+	Level     string    `gorm:"size:20;not null;default:'INFO'" json:"level"` // SUCCESS, INFO, WARNING, ERROR
+	Action    string    `gorm:"size:100;not null" json:"action"`              // Action description
+	Symbol    string    `gorm:"size:50;index" json:"symbol"`                  // Trading symbol if applicable
+	Exchange  string    `gorm:"size:50" json:"exchange"`                      // Exchange name
+	OrderID   *uint     `gorm:"index" json:"order_id"`                        // Related order ID if applicable
+	Price     float64   `gorm:"type:decimal(20,8)" json:"price"`              // Price if applicable
+	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"`             // Amount if applicable
+	Message   string    `gorm:"type:text;not null" json:"message"`            // Log message
+	Details   string    `gorm:"type:text" json:"details"`                     // Additional details (JSON string)
+	IPAddress string    `gorm:"size:45" json:"ip_address"`                    // Client IP
+	UserAgent string    `gorm:"size:255" json:"user_agent"`                   // User agent
+	CreatedAt time.Time `gorm:"index" json:"created_at"`
+
+	// Relationships
+	User  User   `gorm:"foreignKey:UserID" json:"-"`
+	Order *Order `gorm:"foreignKey:OrderID" json:"order,omitempty"`
+}

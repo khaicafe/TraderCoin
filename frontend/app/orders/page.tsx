@@ -1,5 +1,6 @@
 'use client';
 import {useState, useEffect} from 'react';
+import {useRouter} from 'next/navigation';
 import {Order, getOrderHistory, closeOrder} from '../../services/orderService';
 import websocketService from '../../services/websocketService';
 
@@ -32,6 +33,7 @@ interface OrderUpdateMessage {
 }
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -264,114 +266,151 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      fetchOrders();
+    if (!token) {
+      router.push('/login');
+      return;
+    }
 
-      websocketService.connect();
+    // Validate token format (JWT has 3 parts separated by dots)
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      console.error('Invalid token format');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      router.push('/login');
+      return;
+    }
 
-      const statusInterval = setInterval(() => {
-        setWsStatus(websocketService.getConnectionState());
-      }, 1000);
+    // Check token expiration
+    try {
+      const payload = JSON.parse(atob(tokenParts[1]));
+      const expirationTime = payload.exp * 1000; // Convert to milliseconds
+      const currentTime = Date.now();
 
-      const unsubscribeOrderUpdates = websocketService.onMessage((message) => {
-        if (message.type === 'order_update') {
-          const updateMsg = message as OrderUpdateMessage;
-          console.log('📡 Received order update:', updateMsg);
+      if (currentTime >= expirationTime) {
+        console.error('Token expired');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        router.push('/login');
+        return;
+      }
 
-          // Extract data from message.data
-          const data = updateMsg.data;
-          if (!data) {
-            console.warn('❌ Invalid message format: missing data field');
-            return;
+      // Optional: Show warning if token expires in less than 5 minutes
+      const timeUntilExpiry = expirationTime - currentTime;
+      if (timeUntilExpiry < 5 * 60 * 1000) {
+        console.warn(
+          `Token expires in ${Math.floor(timeUntilExpiry / 1000 / 60)} minutes`,
+        );
+      }
+    } catch (err) {
+      console.error('Failed to decode token:', err);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      router.push('/login');
+      return;
+    }
+
+    fetchOrders();
+
+    websocketService.connect();
+
+    const statusInterval = setInterval(() => {
+      setWsStatus(websocketService.getConnectionState());
+    }, 1000);
+
+    const unsubscribeOrderUpdates = websocketService.onMessage((message) => {
+      if (message.type === 'order_update') {
+        const updateMsg = message as OrderUpdateMessage;
+        console.log('📡 Received order update:', updateMsg);
+
+        // Extract data from message.data
+        const data = updateMsg.data;
+        if (!data) {
+          console.warn('❌ Invalid message format: missing data field');
+          return;
+        }
+
+        console.log('📦 Order update data:', {
+          order_id: data.order_id,
+          symbol: data.symbol,
+          status: data.status,
+          has_position: !!data.position,
+          position_data: data.position,
+          isolated: data.position?.isolated,
+        });
+
+        // Update specific order in state with position data
+        setOrders((prevOrders) => {
+          console.log(
+            `🔍 Looking for order ${data.order_id} in ${prevOrders.length} orders`,
+          );
+          console.log(
+            '  Available order IDs:',
+            prevOrders.map((o) => o.id),
+          );
+
+          const orderIndex = prevOrders.findIndex(
+            (o) => o.id === data.order_id,
+          );
+
+          if (orderIndex === -1) {
+            // Order not found, do full refresh
+            console.log(
+              `⚠️  Order ${data.order_id} not found in current list, refreshing...`,
+            );
+            refreshOrdersLight();
+            return prevOrders;
           }
 
-          console.log('📦 Order update data:', {
-            order_id: data.order_id,
-            symbol: data.symbol,
+          // Update order with new data including position info
+          const updatedOrders = [...prevOrders];
+          const existingOrder = updatedOrders[orderIndex];
+
+          updatedOrders[orderIndex] = {
+            ...existingOrder,
             status: data.status,
-            has_position: !!data.position,
-            position_data: data.position,
-            isolated: data.position?.isolated,
-          });
+            position: data.position
+              ? {
+                  position_amt: String(data.position.position_amt || '0'),
+                  entry_price: String(data.position.entry_price || '0'),
+                  mark_price: String(data.position.mark_price || '0'),
+                  liquidation_price: String(
+                    data.position.liquidation_price || '0',
+                  ),
+                  unrealized_profit: String(
+                    data.position.unrealized_profit || '0',
+                  ),
+                  pnl_percent: String(data.position.pnl_percent || '0'),
+                  leverage: String(data.position.leverage || '0'),
+                  margin_type: data.position.margin_type || '',
+                  isolated_margin: String(data.position.isolated_margin || '0'),
+                  position_side: data.position.position_side || '',
+                  isolated: data.position.isolated || false,
+                }
+              : undefined,
+            // Update PnL from position if available
+            ...(data.position && {
+              pnl: Number(data.position.unrealized_profit) || 0,
+              pnl_percent: Number(data.position.pnl_percent) || 0,
+            }),
+          };
 
-          // Update specific order in state with position data
-          setOrders((prevOrders) => {
-            console.log(
-              `🔍 Looking for order ${data.order_id} in ${prevOrders.length} orders`,
-            );
-            console.log(
-              '  Available order IDs:',
-              prevOrders.map((o) => o.id),
-            );
+          console.log(
+            `✅ Updated order ${data.order_id} with status=${data.status}${
+              data.position ? ', position data included' : ''
+            }`,
+          );
+          console.log('Updated order object:', updatedOrders[orderIndex]);
+          return updatedOrders;
+        });
+      }
+    });
 
-            const orderIndex = prevOrders.findIndex(
-              (o) => o.id === data.order_id,
-            );
-
-            if (orderIndex === -1) {
-              // Order not found, do full refresh
-              console.log(
-                `⚠️  Order ${data.order_id} not found in current list, refreshing...`,
-              );
-              refreshOrdersLight();
-              return prevOrders;
-            }
-
-            // Update order with new data including position info
-            const updatedOrders = [...prevOrders];
-            const existingOrder = updatedOrders[orderIndex];
-
-            updatedOrders[orderIndex] = {
-              ...existingOrder,
-              status: data.status,
-              position: data.position
-                ? {
-                    position_amt: String(data.position.position_amt || '0'),
-                    entry_price: String(data.position.entry_price || '0'),
-                    mark_price: String(data.position.mark_price || '0'),
-                    liquidation_price: String(
-                      data.position.liquidation_price || '0',
-                    ),
-                    unrealized_profit: String(
-                      data.position.unrealized_profit || '0',
-                    ),
-                    pnl_percent: String(data.position.pnl_percent || '0'),
-                    leverage: String(data.position.leverage || '0'),
-                    margin_type: data.position.margin_type || '',
-                    isolated_margin: String(
-                      data.position.isolated_margin || '0',
-                    ),
-                    position_side: data.position.position_side || '',
-                    isolated: data.position.isolated || false,
-                  }
-                : undefined,
-              // Update PnL from position if available
-              ...(data.position && {
-                pnl: Number(data.position.unrealized_profit) || 0,
-                pnl_percent: Number(data.position.pnl_percent) || 0,
-              }),
-            };
-
-            console.log(
-              `✅ Updated order ${data.order_id} with status=${data.status}${
-                data.position ? ', position data included' : ''
-              }`,
-            );
-            console.log('Updated order object:', updatedOrders[orderIndex]);
-            return updatedOrders;
-          });
-        }
-      });
-
-      return () => {
-        unsubscribeOrderUpdates();
-        clearInterval(statusInterval);
-        websocketService.disconnect();
-      };
-    } else {
-      setError('You must be logged in to view this page.');
-      setLoading(false);
-    }
+    return () => {
+      unsubscribeOrderUpdates();
+      clearInterval(statusInterval);
+      websocketService.disconnect();
+    };
   }, [filters]);
 
   // Recalculate stats (especially PnL) when orders change (e.g., WebSocket updates)
